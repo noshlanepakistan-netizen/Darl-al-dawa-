@@ -1,0 +1,6 @@
+{
+  "name": "Dar al Dawa Medical Center",
+  "description": "Premier healthcare hospital in Lahore, Punjab offering 24/7 emergency, specialized clinics, advanced diagnostics, and compassionate patient care.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

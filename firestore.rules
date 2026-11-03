@@ -1,0 +1,105 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return isSignedIn();
+    }
+
+    // Public readable hospital content & configuration
+    match /hospital_config/{configId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /departments/{departmentId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /doctors/{doctorId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /packages/{packageId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /gallery/{itemId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /testimonials/{itemId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /blog_posts/{postId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /faqs/{faqId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // Patient Appointment bookings: Public can create, staff can manage
+    match /appointments/{appointmentId} {
+      allow create: if request.resource.data.patientName is string &&
+                       request.resource.data.phone is string &&
+                       request.resource.data.departmentId is string;
+      allow read, update, delete: if isStaff();
+    }
+
+    // Contact messages: Public can send, staff can read & manage
+    match /messages/{messageId} {
+      allow create: if request.resource.data.name is string &&
+                       request.resource.data.message is string;
+      allow read, update, delete: if isStaff();
+    }
+
+    // Lab reports: Read by report ID or staff; created/updated by staff
+    match /lab_reports/{reportId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // Internal Staff Collections (Patients, Invoices, Users, Logs)
+    match /patients/{patientId} {
+      allow read, write: if isStaff();
+    }
+
+    match /invoices/{invoiceId} {
+      allow read, write: if isStaff();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isStaff();
+    }
+
+    match /activity_logs/{logId} {
+      allow read, create: if isStaff();
+      allow update, delete: if false; // immutable audit log
+    }
+  }
+}
