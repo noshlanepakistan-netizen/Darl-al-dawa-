@@ -1,5 +1,13 @@
-import {createRoot} from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { AdminAuthProvider } from './admin/context/AdminAuthContext.tsx';
+import { AdminDataProvider } from './admin/context/AdminDataContext.tsx';
 import './index.css';
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <AdminAuthProvider>
+    <AdminDataProvider>
+      <App />
+    </AdminDataProvider>
+  </AdminAuthProvider>
+);

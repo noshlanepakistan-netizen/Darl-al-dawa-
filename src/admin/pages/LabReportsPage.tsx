@@ -16,6 +16,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { LabReportRecord } from '../types';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 interface LabReportsPageProps {
   lang: 'en' | 'ur';
@@ -28,6 +29,7 @@ export const LabReportsPage: React.FC<LabReportsPageProps> = ({ lang }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<LabReportRecord | null>(null);
 
   // Form Fields
   const [patientName, setPatientName] = useState('');
@@ -219,12 +221,9 @@ export const LabReportsPage: React.FC<LabReportsPageProps> = ({ lang }) => {
                       </a>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm(`Delete report ${rep.reportId}?`)) {
-                            deleteLabReport(rep.id);
-                          }
-                        }}
+                        onClick={() => setDeleteTarget(rep)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-[#D62828] hover:bg-red-50 transition-colors cursor-pointer"
+                        title="Delete lab report"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -353,6 +352,20 @@ export const LabReportsPage: React.FC<LabReportsPageProps> = ({ lang }) => {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Lab Report?"
+        message={`Are you sure you want to permanently delete report ${deleteTarget?.reportId} for ${deleteTarget?.patientName}?`}
+        itemName={`${deleteTarget?.reportId} - ${deleteTarget?.patientName}`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteLabReport(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

@@ -15,6 +15,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { DEPARTMENTS, Doctor } from '../../data/hospitalData';
+import { ImageUploadField } from '../components/ImageUploadField';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 interface DoctorsPageProps {
   lang: 'en' | 'ur';
@@ -26,6 +28,9 @@ export const DoctorsPage: React.FC<DoctorsPageProps> = ({ lang }) => {
 
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState('all');
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<Doctor | null>(null);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -272,11 +277,7 @@ export const DoctorsPage: React.FC<DoctorsPageProps> = ({ lang }) => {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (window.confirm(`Delete ${doc.name} from faculty?`)) {
-                        deleteDoctor(doc.id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget(doc)}
                     className="p-2 rounded-lg bg-red-50 text-[#D62828] hover:bg-[#D62828] hover:text-white transition-colors cursor-pointer"
                     title="Delete Doctor"
                   >
@@ -412,14 +413,13 @@ export const DoctorsPage: React.FC<DoctorsPageProps> = ({ lang }) => {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Doctor Photo URL</label>
-                <input
-                  type="url"
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <ImageUploadField
+                  label="Doctor Photo"
                   value={image}
-                  onChange={(e) => setImage(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none"
+                  onChange={setImage}
+                  aspectRatio="avatar"
+                  helpText="Choose portrait photo directly from device / gallery"
                 />
               </div>
 
@@ -453,6 +453,20 @@ export const DoctorsPage: React.FC<DoctorsPageProps> = ({ lang }) => {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Doctor Profile?"
+        message={`Are you sure you want to remove ${deleteTarget?.name} from the medical faculty list?`}
+        itemName={deleteTarget?.name}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteDoctor(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

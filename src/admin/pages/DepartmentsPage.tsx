@@ -22,6 +22,8 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { Department } from '../../data/hospitalData';
+import { ImageUploadField } from '../components/ImageUploadField';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 interface DepartmentsPageProps {
   lang: 'en' | 'ur';
@@ -49,6 +51,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
 
   // Form Fields
   const [title, setTitle] = useState('');
@@ -56,6 +59,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
   const [iconName, setIconName] = useState('Stethoscope');
   const [description, setDescription] = useState('');
   const [descriptionUrdu, setDescriptionUrdu] = useState('');
+  const [image, setImage] = useState('');
   const [headDoctor, setHeadDoctor] = useState('Senior Consultant');
 
   const handleOpenAdd = () => {
@@ -65,6 +69,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
     setIconName('Stethoscope');
     setDescription('');
     setDescriptionUrdu('');
+    setImage('');
     setHeadDoctor('Senior Consultant');
     setIsModalOpen(true);
   };
@@ -76,6 +81,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
     setIconName(dept.iconName);
     setDescription(dept.description);
     setDescriptionUrdu(dept.descriptionUrdu);
+    setImage(dept.image || '');
     setHeadDoctor(dept.headDoctor);
     setIsModalOpen(true);
   };
@@ -91,6 +97,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
         iconName,
         description,
         descriptionUrdu: descriptionUrdu || description,
+        image,
         headDoctor
       });
     } else {
@@ -100,6 +107,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
         iconName,
         description,
         descriptionUrdu: descriptionUrdu || description,
+        image,
         headDoctor,
         features: ['24/7 Specialist Coverage', 'Advanced Diagnostics', 'Inpatient Facility'],
         featuresUrdu: ['24 گھنٹے ماہر ڈاکٹرز', 'جدید تشخیصی سہولیات', 'داخلہ وارڈ']
@@ -192,11 +200,7 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm(`Delete department ${dept.title}?`)) {
-                    deleteDepartment(dept.id);
-                  }
-                }}
+                onClick={() => setDeleteTarget(dept)}
                 className="p-1.5 rounded-lg bg-red-50 text-[#D62828] hover:bg-[#D62828] hover:text-white transition-colors cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -277,6 +281,17 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
                 />
               </div>
 
+              {/* Department Image (Upload from device) */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <ImageUploadField
+                  label="Department Photo"
+                  value={image}
+                  onChange={setImage}
+                  aspectRatio="wide"
+                  helpText="Choose image directly from device / gallery"
+                />
+              </div>
+
               <div className="pt-2 flex gap-3">
                 <button
                   type="button"
@@ -296,6 +311,21 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({ lang }) => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Department?"
+        message={`Are you sure you want to delete "${deleteTarget?.title}"?`}
+        itemName={deleteTarget?.title}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteDepartment(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

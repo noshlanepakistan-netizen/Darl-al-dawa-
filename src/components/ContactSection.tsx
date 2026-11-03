@@ -58,13 +58,18 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
         
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-14">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-blue-100 text-[#1E5AA8] text-xs font-semibold uppercase tracking-wider mb-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-50 text-[#2E9E5B] border border-emerald-200 text-xs font-semibold uppercase tracking-wider mb-3">
             <MapPin className="w-3.5 h-3.5" />
             <span className={isUrdu ? 'font-urdu' : ''}>{t.badge}</span>
           </div>
-          <h2 className={`text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 leading-tight mb-4 ${isUrdu ? 'font-urdu text-3xl sm:text-4xl leading-[1.6]' : 'font-heading'}`}>
-            {t.heading}
+          <h2 className={`text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 leading-tight mb-3 ${isUrdu ? 'font-urdu text-3xl sm:text-4xl leading-[1.6]' : 'font-heading'}`}>
+            {isUrdu ? (
+              <span>رابطہ اور <span className="text-[#2E9E5B]">ہسپتال کا پتہ</span></span>
+            ) : (
+              <span>Contact & <span className="text-[#2E9E5B]">Hospital Location</span></span>
+            )}
           </h2>
+          <div className="w-12 h-1 bg-gradient-to-r from-[#2E9E5B] to-emerald-400 rounded-full mx-auto mb-3" />
           <p className={`text-slate-600 text-sm sm:text-base leading-relaxed ${isUrdu ? 'font-urdu text-base' : 'font-body'}`}>
             {t.subheading}
           </p>
@@ -83,7 +88,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
                 {t.emergencyTitle}
               </h3>
               <p className="text-xs text-slate-600 mb-3">
-                {isUrdu ? 'لاہور بھر میں ایمبولینس اور فوری ٹراما' : 'Rapid ambulance dispatch & resuscitation'}
+                {isUrdu ? 'لاہور میں فوری ٹراما و ایمرجنسی نگہداشت' : 'Rapid trauma care & critical resuscitation'}
               </p>
             </div>
             <a

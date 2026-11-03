@@ -15,6 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { StaffUser, StaffRole } from '../types';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 interface UsersPageProps {
   lang: 'en' | 'ur';
@@ -27,6 +28,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ lang }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'logs'>('users');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffUser | null>(null);
 
   // Form Fields
   const [name, setName] = useState('');
@@ -207,12 +209,9 @@ export const UsersPage: React.FC<UsersPageProps> = ({ lang }) => {
                         {user.role !== 'super_admin' && (
                           <button
                             type="button"
-                            onClick={() => {
-                              if (window.confirm(`Delete staff account for ${user.name}?`)) {
-                                deleteStaffUser(user.id);
-                              }
-                            }}
+                            onClick={() => setDeleteTarget(user)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Delete staff account"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -364,6 +363,20 @@ export const UsersPage: React.FC<UsersPageProps> = ({ lang }) => {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Staff Account?"
+        message={`Are you sure you want to delete the staff account for ${deleteTarget?.name}? This action cannot be undone.`}
+        itemName={`${deleteTarget?.name} (${deleteTarget?.role})`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteStaffUser(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

@@ -8,6 +8,8 @@ interface AdminAuthContextType {
   login: (email: string, pass: string, remember: boolean) => Promise<boolean>;
   logout: () => void;
   switchRole: (role: StaffRole) => void;
+  updateProfile: (name: string, email: string) => boolean;
+  changePassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
   canAccess: (moduleName: string) => boolean;
   inactivityRemainingSeconds: number;
 }
@@ -100,6 +102,26 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const updateProfile = (name: string, email: string): boolean => {
+    if (!currentUser) return false;
+    const updated = { ...currentUser, name, email };
+    setCurrentUser(updated);
+    localStorage.setItem('dad_admin_user', JSON.stringify(updated));
+    return true;
+  };
+
+  const changePassword = (oldPass: string, newPass: string): { success: boolean; message: string } => {
+    if (!oldPass || !newPass) {
+      return { success: false, message: 'All password fields are required.' };
+    }
+    if (newPass.length < 6) {
+      return { success: false, message: 'New password must be at least 6 characters.' };
+    }
+    // Save password change to local storage key
+    localStorage.setItem('dad_admin_password', newPass);
+    return { success: true, message: 'Admin password updated successfully!' };
+  };
+
   /**
    * Role-Based Access Control logic:
    * Super Admin: full access to everything
@@ -149,6 +171,8 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         login,
         logout,
         switchRole,
+        updateProfile,
+        changePassword,
         canAccess,
         inactivityRemainingSeconds
       }}

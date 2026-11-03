@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { DEPARTMENTS, DOCTORS, HOSPITAL_CONFIG } from '../../data/hospitalData';
 import { AdminAppointment, AppointmentStatus } from '../types';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 interface AppointmentsPageProps {
   lang: 'en' | 'ur';
@@ -34,6 +35,9 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deptFilter, setDeptFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<AdminAppointment | null>(null);
 
   // Add Manual Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -370,11 +374,7 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
                       <td className="py-3 px-4 text-right">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (window.confirm(`Delete appointment ${app.token}?`)) {
-                              deleteAppointment(app.id);
-                            }
-                          }}
+                          onClick={() => setDeleteTarget(app)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-[#D62828] hover:bg-red-50 transition-colors cursor-pointer"
                           title="Delete appointment"
                         >
@@ -531,6 +531,20 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Appointment Token?"
+        message={`Are you sure you want to permanently delete appointment token ${deleteTarget?.token} for ${deleteTarget?.patientName}?`}
+        itemName={`${deleteTarget?.token} - ${deleteTarget?.patientName}`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteAppointment(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

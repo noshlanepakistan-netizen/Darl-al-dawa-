@@ -29,9 +29,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 30);
 
-      // Section tracker
-      const sections = ['home', 'about', 'departments', 'doctors', 'services', 'packages', 'appointment', 'gallery', 'blog', 'faq', 'contact'];
-      const scrollPosition = window.scrollY + 120;
+      // Section tracker in the exact new page order
+      const sections = [
+        'home',
+        'appointment',
+        'departments',
+        'doctors',
+        'services',
+        'about',
+        'packages',
+        'testimonials',
+        'gallery',
+        'blog',
+        'faq',
+        'contact'
+      ];
+      const scrollPosition = window.scrollY + 140;
 
       for (const sectionId of sections) {
         const el = document.getElementById(sectionId);
@@ -50,16 +63,16 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Reordered navigation links matching the new layout
   const navLinks = [
     { id: 'home', label: t.home, href: '#home' },
-    { id: 'about', label: t.about, href: '#about' },
+    { id: 'appointment', label: t.appointment, href: '#appointment' },
     { id: 'departments', label: t.departments, href: '#departments' },
     { id: 'doctors', label: t.doctors, href: '#doctors' },
     { id: 'services', label: t.services, href: '#services' },
+    { id: 'about', label: t.about, href: '#about' },
     { id: 'packages', label: t.packages, href: '#packages' },
-    { id: 'appointment', label: t.appointment, href: '#appointment' },
-    { id: 'gallery', label: t.gallery, href: '#gallery' },
-    { id: 'blog', label: t.blog, href: '#blog' },
+    { id: 'testimonials', label: isUrdu ? 'تاثرات' : 'Testimonials', href: '#testimonials' },
     { id: 'faq', label: t.faq, href: '#faq' },
     { id: 'contact', label: t.contact, href: '#contact' }
   ];
@@ -78,7 +91,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       className={`sticky top-0 z-40 transition-all duration-300 ${
         isScrolled
           ? 'bg-white/95 backdrop-blur-md shadow-md py-2.5 border-b border-slate-200'
-          : 'bg-white py-3.5 border-b border-slate-100 shadow-sm'
+          : 'bg-white py-3 border-b border-slate-100 shadow-xs'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between">
@@ -87,8 +100,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           <Logo isUrdu={isUrdu} />
         </a>
 
-        {/* Desktop Navigation Links */}
-        <nav className="hidden xl:flex items-center gap-1 2xl:gap-2">
+        {/* Desktop Navigation Links (New Order) */}
+        <nav className="hidden xl:flex items-center gap-1 2xl:gap-1.5">
           {navLinks.map((link) => {
             const isActive = activeSection === link.id;
             return (
@@ -96,11 +109,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 key={link.id}
                 href={link.href}
                 onClick={(e) => handleLinkClick(e, link.href)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                  isUrdu ? 'font-urdu text-base' : 'font-body'
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  isUrdu ? 'font-urdu text-sm' : 'font-body'
                 } ${
                   isActive
-                    ? 'text-[#1E5AA8] bg-blue-50 font-semibold'
+                    ? 'text-[#1E5AA8] bg-blue-50 font-bold'
                     : 'text-slate-700 hover:text-[#1E5AA8] hover:bg-slate-50'
                 }`}
               >
@@ -116,9 +129,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenReportsModal}
               type="button"
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:text-[#1E5AA8] hover:border-[#1E5AA8] text-xs font-semibold cursor-pointer"
+              className="text-xs font-semibold text-slate-700 hover:text-[#1E5AA8] px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors border border-slate-200 cursor-pointer whitespace-nowrap"
             >
-              {isUrdu ? 'لیب رپورٹس' : 'Lab Reports'}
+              <span>{isUrdu ? 'آن لائن رپورٹ' : 'Lab Reports'}</span>
             </button>
           )}
 
@@ -126,120 +139,108 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onGoToAdmin}
               type="button"
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold cursor-pointer"
+              className="text-xs font-semibold text-slate-700 hover:text-[#1E5AA8] px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors border border-slate-200 cursor-pointer whitespace-nowrap"
             >
-              {isUrdu ? 'اسٹاف پورٹل' : 'Staff Portal'}
+              <span>{isUrdu ? 'اسٹاف لاگ ان' : 'Staff Portal'}</span>
             </button>
           )}
 
-          {/* Language Toggle Button */}
+          {/* 24/7 Emergency Quick Call */}
+          <a
+            href={`tel:${HOSPITAL_CONFIG.contact.emergencyNumberRaw}`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 text-[#D62828] border border-red-200 hover:bg-red-100 font-bold text-xs transition-colors whitespace-nowrap shadow-xs"
+            title="Call 24/7 Emergency Hotline"
+          >
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span className="font-mono">1122 / 042</span>
+          </a>
+
+          {/* Book Appointment CTA */}
+          <button
+            onClick={() => onNavigateToAppointment()}
+            type="button"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1E5AA8] hover:bg-[#154685] text-white font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer whitespace-nowrap"
+          >
+            <CalendarCheck className="w-3.5 h-3.5" />
+            <span className={isUrdu ? 'font-urdu text-sm' : ''}>{t.bookBtn}</span>
+          </button>
+
+          {/* Language Toggle */}
           <button
             onClick={onToggleLang}
             type="button"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-slate-300 text-slate-700 hover:text-[#1E5AA8] hover:border-[#1E5AA8] transition-all bg-slate-50 hover:bg-white text-xs font-semibold shadow-xs"
-            aria-label="Toggle language between English and Urdu"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            title={isUrdu ? "Switch to English" : "اردو میں دیکھیں"}
           >
             <Globe className="w-3.5 h-3.5 text-[#1E5AA8]" />
             <span>{isUrdu ? 'English' : 'اردو'}</span>
           </button>
-
-          {/* Emergency Button (Red #D62828) */}
-          <a
-            href={`tel:${HOSPITAL_CONFIG.contact.emergencyNumberRaw}`}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#D62828] hover:bg-[#b71f1f] text-white text-xs font-bold tracking-wide uppercase shadow-sm hover:shadow-md transition-all active:scale-95"
-            title="Call 24/7 Hospital Emergency"
-          >
-            <PhoneCall className="w-3.5 h-3.5 animate-pulse" />
-            <span className={isUrdu ? 'font-urdu text-sm capitalize font-normal' : ''}>
-              {isUrdu ? 'ایمرجنسی' : 'Emergency'}
-            </span>
-          </a>
-
-          {/* Book Appointment Button (Green #2E9E5B) */}
-          <button
-            onClick={() => onNavigateToAppointment()}
-            type="button"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#2E9E5B] hover:bg-[#25824b] text-white text-xs font-bold shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
-          >
-            <CalendarCheck className="w-3.5 h-3.5" />
-            <span className={isUrdu ? 'font-urdu text-sm font-normal' : ''}>
-              {t.bookBtn}
-            </span>
-          </button>
         </div>
 
-        {/* Mobile controls: Lang toggle + Hamburger */}
-        <div className="flex items-center gap-2 lg:hidden">
+        {/* Mobile Menu & Language Toggle Button */}
+        <div className="flex items-center gap-2 xl:hidden">
           <button
             onClick={onToggleLang}
             type="button"
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 bg-slate-50"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
           >
             <Globe className="w-3 h-3 text-[#1E5AA8]" />
-            <span>{isUrdu ? 'EN' : 'اردو'}</span>
+            <span>{isUrdu ? 'English' : 'اردو'}</span>
           </button>
-
-          <a
-            href={`tel:${HOSPITAL_CONFIG.contact.emergencyNumberRaw}`}
-            className="p-2 rounded-lg bg-[#D62828] text-white"
-            aria-label="Call Emergency"
-          >
-            <PhoneCall className="w-4 h-4" />
-          </a>
 
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             type="button"
-            className="p-2 rounded-lg text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-            aria-label="Toggle navigation menu"
+            className="p-2 rounded-lg text-slate-700 hover:bg-slate-100 focus:outline-none"
+            aria-label="Toggle mobile menu"
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Drawer Navigation */}
+      {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-x-0 top-[65px] bg-white border-b border-slate-200 shadow-xl max-h-[85vh] overflow-y-auto px-5 py-6 space-y-4 animate-in slide-in-from-top-4 duration-200">
-          <div className="grid grid-cols-1 gap-1">
+        <div className="xl:hidden bg-white border-b border-slate-200 shadow-xl px-4 py-4 space-y-3 animate-in slide-in-from-top-4 duration-200">
+          <nav className="flex flex-col space-y-1">
             {navLinks.map((link) => (
               <a
                 key={link.id}
                 href={link.href}
                 onClick={(e) => handleLinkClick(e, link.href)}
-                className={`flex items-center justify-between py-2.5 px-3 rounded-lg text-base font-medium transition-colors ${
-                  isUrdu ? 'font-urdu text-lg' : 'font-body'
+                className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between ${
+                  isUrdu ? 'font-urdu text-base' : ''
                 } ${
                   activeSection === link.id
-                    ? 'bg-blue-50 text-[#1E5AA8] font-semibold'
-                    : 'text-slate-800 hover:bg-slate-50'
+                    ? 'bg-blue-50 text-[#1E5AA8] font-bold'
+                    : 'text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <span>{link.label}</span>
                 <ChevronRight className={`w-4 h-4 text-slate-400 ${isUrdu ? 'rotate-180' : ''}`} />
               </a>
             ))}
-          </div>
+          </nav>
 
-          <div className="pt-4 border-t border-slate-200 space-y-2.5">
+          <div className="pt-3 border-t border-slate-100 space-y-2">
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
                 onNavigateToAppointment();
               }}
               type="button"
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-semibold shadow-md text-sm"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#1E5AA8] text-white font-bold text-sm shadow-xs"
             >
               <CalendarCheck className="w-4 h-4" />
-              <span className={isUrdu ? 'font-urdu' : ''}>{t.bookBtn}</span>
+              <span className={isUrdu ? 'font-urdu text-base' : ''}>{t.bookBtn}</span>
             </button>
 
             <a
               href={`tel:${HOSPITAL_CONFIG.contact.emergencyNumberRaw}`}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#D62828] hover:bg-[#b71f1f] text-white font-bold text-sm shadow-md"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-red-600 text-white font-bold text-sm shadow-xs"
             >
               <PhoneCall className="w-4 h-4" />
-              <span>{isUrdu ? 'ایمرجنسی کال: 042-111-327-227' : '24/7 Emergency: 042-111-327-227'}</span>
+              <span>{isUrdu ? 'فوری ایمرجنسی کال (24/7)' : '24/7 Emergency Call'}</span>
             </a>
 
             {onOpenReportsModal && (
@@ -249,9 +250,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onOpenReportsModal();
                 }}
                 type="button"
-                className="w-full py-2.5 px-3 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs"
+                className="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs text-center block"
               >
-                {isUrdu ? 'آن لائن لیب رپورٹ ڈاؤن لوڈ' : 'Download Lab Report'}
+                <span>{isUrdu ? 'آن لائن لیب رپورٹ ڈاؤن لوڈ' : 'Download Lab Report'}</span>
               </button>
             )}
 
@@ -262,9 +263,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onGoToAdmin();
                 }}
                 type="button"
-                className="w-full py-2.5 px-3 rounded-xl bg-slate-800 text-white font-semibold text-xs"
+                className="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs text-center block"
               >
-                {isUrdu ? 'اسٹاف پورٹل لاگ ان' : 'Staff Portal Login'}
+                <span>{isUrdu ? 'اسٹاف ایڈمن پورٹل' : 'Staff Admin Portal'}</span>
               </button>
             )}
           </div>

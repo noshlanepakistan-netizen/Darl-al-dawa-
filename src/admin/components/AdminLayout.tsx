@@ -103,8 +103,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               <Logo lightMode={true} isUrdu={isUrdu} />
             </button>
           ) : (
-            <button onClick={onGoHome} type="button" className="w-10 h-10 rounded-xl bg-[#1E5AA8] text-white flex items-center justify-center font-bold">
-              DAD
+            <button onClick={onGoHome} type="button" className="w-10 h-10 rounded-xl overflow-hidden bg-white p-1 border border-slate-700 flex items-center justify-center cursor-pointer shadow-xs">
+              <img src="/assets/aistudio/image_424d9421.png" alt="Logo" className="w-full h-full object-contain" />
             </button>
           )}
 

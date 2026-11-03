@@ -175,9 +175,14 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
             <CalendarCheck className="w-3.5 h-3.5" />
             <span className={isUrdu ? 'font-urdu' : ''}>{t.badge}</span>
           </div>
-          <h2 className={`text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 leading-tight mb-4 ${isUrdu ? 'font-urdu text-3xl sm:text-4xl leading-[1.6]' : 'font-heading'}`}>
-            {t.heading}
+          <h2 className={`text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 leading-tight mb-3 ${isUrdu ? 'font-urdu text-3xl sm:text-4xl leading-[1.6]' : 'font-heading'}`}>
+            {isUrdu ? (
+              <span>آن لائن <span className="text-[#2E9E5B]">اپوائنٹمنٹ بک کریں</span></span>
+            ) : (
+              <span>Book Your Hospital <span className="text-[#2E9E5B]">Appointment Online</span></span>
+            )}
           </h2>
+          <div className="w-12 h-1 bg-gradient-to-r from-[#2E9E5B] to-emerald-400 rounded-full mx-auto mb-3" />
           <p className={`text-slate-600 text-sm sm:text-base leading-relaxed ${isUrdu ? 'font-urdu text-base' : 'font-body'}`}>
             {t.subheading}
           </p>

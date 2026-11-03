@@ -21,6 +21,7 @@ export interface Doctor {
   about: string;
   aboutUrdu: string;
   pmdcNo: string;
+  active?: boolean;
 }
 
 export interface Department {
@@ -30,6 +31,9 @@ export interface Department {
   iconName: string;
   description: string;
   descriptionUrdu: string;
+  fullDescription?: string;
+  image?: string;
+  order?: number;
   features: string[];
   featuresUrdu: string[];
   headDoctor: string;
@@ -124,15 +128,25 @@ export const HOSPITAL_CONFIG = {
   nameUrdu: "دار الدواء میڈیکل سنٹر",
   tagline: "Caring for You, Every Step of the Way",
   taglineUrdu: "ہر قدم پر آپ کی صحت اور دیکھ بھال کا امین",
+  logo: "/assets/aistudio/image_424d9421.png",
+  favicon: "/assets/aistudio/image_424d9421.png",
   shortDesc: "Premier tertiary-care teaching & general hospital in Lahore, Punjab delivering 24/7 critical emergency care, world-class surgical facilities, and compassionate specialized treatments.",
   shortDescUrdu: "لاہور، پنجاب میں 24/7 ایمرجنسی، جدید ترین سرجیکل اور اسپیشلسٹ طبی سہولیات سے آراستہ جدید ترین ہسپتال۔",
   
+  socialLinks: {
+    facebook: "https://facebook.com/daraldawamedical",
+    instagram: "https://instagram.com/daraldawamedical",
+    youtube: "https://youtube.com/@daraldawamedical",
+    tiktok: "https://tiktok.com/@daraldawamedical",
+    twitter: "https://twitter.com/daraldawamedical"
+  },
+
   contact: {
     emergencyNumber: "042-111-327-227", // 042-111-DAR-DAR
     emergencyNumberRaw: "042111327227",
     mobileEmergency: "+92 300 1234567",
     receptionPhone: "+92 42 35789000",
-    ambulanceHotline: "042-35789112",
+    phoneNumbers: ["042-111-327-227", "+92 42 35789000", "+92 300 1234567"],
     whatsapp: "+92 300 1234567",
     whatsappClean: "923001234567",
     email: "info@daraldawa.pk",
@@ -212,8 +226,8 @@ export const DEPARTMENTS: Department[] = [
     iconName: "ShieldAlert",
     description: "24/7 rapid response trauma care, advanced resuscitation suites, and immediate life-saving emergency medical interventions.",
     descriptionUrdu: "24 گھنٹے ٹراما اور فوری جان بچانے والے ایمرجنسی علاج کے لیے جدید ترین آئی سی یو لائف سپورٹ سسٹم۔",
-    features: ["24/7 On-duty Trauma Surgeons", "Cardiac Resuscitation Room", "Mobile ICU Ambulances", "Rapid Triage & Zero Wait"],
-    featuresUrdu: ["24 گھنٹے ٹراما سرجنز دستیاب", "کارڈیک ریسیسیٹیشن روم", "موبائل آئی سی یو ایمبولینس", "بغیر انتظار فوری علاج"],
+    features: ["24/7 On-duty Trauma Surgeons", "Cardiac Resuscitation Room", "High-Dependency Critical Beds", "Rapid Triage & Zero Wait"],
+    featuresUrdu: ["24 گھنٹے ٹراما سرجنز دستیاب", "کارڈیک ریسیسیٹیشن روم", "ہائی ڈیپینڈینسی آئی سی یو بیڈز", "بغیر انتظار فوری علاج"],
     headDoctor: "Dr. Bilal Hassan"
   },
   {
@@ -464,21 +478,143 @@ export const DOCTORS: Doctor[] = [
     about: "Specialized in stubborn acne treatments, hair thinning therapies (PRP), pigmentation correction, and medical-grade anti-aging skin protocols.",
     aboutUrdu: "ایکنی، بالوں کا گرنا، جلد کی الرجی اور جدید لیزر علاج کی مستند کنسلٹنٹ۔",
     pmdcNo: "33890-P"
+  },
+  {
+    id: "doc-bilal",
+    name: "Dr. Bilal Hassan",
+    nameUrdu: "ڈاکٹر بلال حسن",
+    departmentId: "emergency",
+    specialty: "Chief Emergency Medicine & Trauma Surgeon",
+    specialtyUrdu: "چیف ایمرجنسی میڈیسن و ٹراما سرجن",
+    qualification: "MBBS, FCPS (Emergency Medicine), ATLS (USA)",
+    experience: "15+ Years Experience",
+    opdTimings: "24/7 On-Duty Rota & Resuscitation",
+    opdTimingsUrdu: "24 گھنٹے ایمرجنسی شفٹ و نگہداشت",
+    days: "Monday to Sunday (24/7)",
+    daysUrdu: "پیر تا اتوار (24 گھنٹے)",
+    feePKR: 2000,
+    image: "https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&w=600&q=80",
+    about: "Lead trauma director specialized in acute myocardial infarction stabilization, polytrauma resuscitation, stroke protocol, and advanced life support.",
+    aboutUrdu: "ایمرجنسی و ٹراما کے ماہر سرجن، دل کے دورے اور فوری جان بچانے والی طبی سہولیات کے نگراں۔",
+    pmdcNo: "31289-P"
+  },
+  {
+    id: "doc-usman",
+    name: "Dr. Usman Tariq",
+    nameUrdu: "ڈاکٹر عثمان طارق",
+    departmentId: "dental",
+    specialty: "Consultant Dental Surgeon & Implantologist",
+    specialtyUrdu: "کنسلٹنٹ ڈینٹل سرجن و امپلانٹ اسپیشلسٹ",
+    qualification: "BDS, RDS, C-Implants (USA), MCPS",
+    experience: "13+ Years Experience",
+    opdTimings: "04:00 PM – 09:00 PM",
+    opdTimingsUrdu: "شام 4 تا رات 9 بجے",
+    days: "Monday to Saturday",
+    daysUrdu: "پیر تا ہفتہ",
+    feePKR: 1500,
+    image: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80",
+    about: "Specializes in painless computer-guided titanium dental implants, root canal treatment, Hollywood smile design, veneers, and orthodontic braces.",
+    aboutUrdu: "مستقل ڈینٹل امپلانٹ، روٹ کینال، اور کاسمیٹک دانتوں کی خوبصورتی کے نامور ماہر۔",
+    pmdcNo: "21908-D"
+  },
+  {
+    id: "doc-noman",
+    name: "Dr. Noman Arshad",
+    nameUrdu: "ڈاکٹر نعمان ارشد",
+    departmentId: "ent",
+    specialty: "Consultant ENT, Head & Neck Surgeon",
+    specialtyUrdu: "کنسلٹنٹ ای این ٹی، ناک، کان، گلا و ہیڈ اینڈ نیک سرجن",
+    qualification: "MBBS, FCPS (ENT), Fellowship Rhinology (UK)",
+    experience: "16+ Years Experience",
+    opdTimings: "05:00 PM – 08:30 PM",
+    opdTimingsUrdu: "شام 5 تا رات 8:30 بجے",
+    days: "Mon, Tue, Thu, Fri",
+    daysUrdu: "پیر، منگل، جمعرات، جمعہ",
+    feePKR: 2500,
+    image: "https://images.unsplash.com/photo-1551601651-2a8555f1a136?auto=format&fit=crop&w=600&q=80",
+    about: "Pioneer in functional endoscopic sinus surgery (FESS), tympanoplasty, micro-laryngeal surgery, snoring treatments, and audiology hearing diagnostics.",
+    aboutUrdu: "ناک، کان اور گلے کے جدید مائیکرو اسکوپک اور دوربینی آپریشنز کے سینئر کنسلٹنٹ۔",
+    pmdcNo: "26441-P"
+  },
+  {
+    id: "doc-qasim",
+    name: "Dr. M. Qasim Bashir",
+    nameUrdu: "ڈاکٹر محمد قاسم بشیر",
+    departmentId: "ophthalmology",
+    specialty: "Consultant Eye Surgeon & Phaco Specialist",
+    specialtyUrdu: "کنسلٹنٹ ماہر امراضِ چشم و فیکو سرجن",
+    qualification: "MBBS, FCPS (Ophthalmology), FRCS (Glasgow)",
+    experience: "19+ Years Experience",
+    opdTimings: "03:30 PM – 07:30 PM",
+    opdTimingsUrdu: "سہ پہر 3:30 تا شام 7:30 بجے",
+    days: "Monday to Friday",
+    daysUrdu: "پیر تا جمعہ",
+    feePKR: 2500,
+    image: "https://images.unsplash.com/photo-1614608682850-e0d6ed316d47?auto=format&fit=crop&w=600&q=80",
+    about: "Over 8,000 successful sutureless cataract surgeries performed with premium multifocal and toric IOL implants, plus diabetic retinopathy laser treatments.",
+    aboutUrdu: "بغیر ٹانکے کے سفید موتیے کے فیکو آپریشن، کالے موتیے اور ریٹینا لیزر کے معروف سرجن۔",
+    pmdcNo: "18920-P"
+  },
+  {
+    id: "doc-naveed",
+    name: "Dr. Naveed Raza",
+    nameUrdu: "ڈاکٹر نوید رضا",
+    departmentId: "radiology",
+    specialty: "Consultant Radiologist & Cross-Sectional Imaging",
+    specialtyUrdu: "کنسلٹنٹ ریڈیالوجسٹ و امیجنگ اسپیشلسٹ",
+    qualification: "MBBS, DMRD, FCPS (Radiology)",
+    experience: "17+ Years Experience",
+    opdTimings: "09:00 AM – 03:00 PM",
+    opdTimingsUrdu: "صبح 9 تا سہ پہر 3 بجے",
+    days: "Monday to Saturday",
+    daysUrdu: "پیر تا ہفتہ",
+    feePKR: 2000,
+    image: "https://images.unsplash.com/photo-1638202993928-7267aad84c31?auto=format&fit=crop&w=600&q=80",
+    about: "Expert in 128-slice CT angiography reporting, 4D anomaly pregnancy ultrasound, MRI brain/musculoskeletal diagnostics, and image-guided biopsies.",
+    aboutUrdu: "سی ٹی اسکین، ایم آر آئی اور 4D کلر ڈوپلر الٹراساؤنڈ کی مستند رپورٹنگ کے سربراہ۔",
+    pmdcNo: "27814-P"
+  },
+  {
+    id: "doc-mansoor",
+    name: "Prof. Dr. Mansoor Ahmad",
+    nameUrdu: "پروفیسر ڈاکٹر منصور احمد",
+    departmentId: "laboratory",
+    specialty: "Consultant Pathologist & Laboratory Director",
+    specialtyUrdu: "کنسلٹنٹ پیتھالوجسٹ و ڈائریکٹر لیبارٹری",
+    qualification: "MBBS, M.Phil (Pathology), FRCPath",
+    experience: "25+ Years Experience",
+    opdTimings: "09:00 AM – 05:00 PM",
+    opdTimingsUrdu: "صبح 9 تا شام 5 بجے",
+    days: "Monday to Saturday",
+    daysUrdu: "پیر تا ہفتہ",
+    feePKR: 1500,
+    image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80",
+    about: "Oversees all automated biochemical, hematological, microbiological, and histopathological clinical analyses under strict ISO 15189 compliance.",
+    aboutUrdu: "25 سالہ تجربہ کار پیتھالوجسٹ، تمام خون و بائیوپسی ٹیسٹوں کے تصدیق کنندہ۔",
+    pmdcNo: "11520-P"
+  },
+  {
+    id: "doc-raheel",
+    name: "Pharm. Raheel Butt",
+    nameUrdu: "فارماسسٹ راحیل بٹ",
+    departmentId: "pharmacy",
+    specialty: "Chief Clinical Pharmacist",
+    specialtyUrdu: "چیف کلینیکل فارماسسٹ",
+    qualification: "Pharm-D, M.Phil (Clinical Pharmacy), RPh",
+    experience: "11+ Years Experience",
+    opdTimings: "08:00 AM – 10:00 PM",
+    opdTimingsUrdu: "صبح 8 تا رات 10 بجے",
+    days: "Monday to Sunday (Daily)",
+    daysUrdu: "پیر تا اتوار (روزانہ)",
+    feePKR: 500,
+    image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=600&q=80",
+    about: "Coordinates hospital pharmacovigilance, drug interaction safety screening, cold chain vaccine potency, and in-patient dosage regimens.",
+    aboutUrdu: "مستند کلینیکل فارماسسٹ، ادویات کے درست استعمال اور محفوظ ترسیل کے نگراں۔",
+    pmdcNo: "09441-Pharm"
   }
 ];
 
 export const SERVICES_FACILITIES: ServiceFacility[] = [
-  {
-    id: "ambulance",
-    title: "24/7 Cardiac & Trauma Ambulance",
-    titleUrdu: "24/7 کارڈیالوجی و ٹراما ایمبولینس",
-    iconName: "Truck",
-    badge: "GPS Tracked",
-    badgeUrdu: "جی پی ایس ٹریکنگ",
-    description: "Fully equipped mobile ICUs with defibrillators, oxygen manifolds, ventilators, and paramedic attendants covering all areas of Lahore.",
-    descriptionUrdu: "لاہور بھر میں ایمرجنسی وینٹی لیٹر، آکسیجن اور پیرا میڈیکل عملے سے لیس ایمبولینس سروس۔",
-    image: "https://images.unsplash.com/photo-1587745416684-47953f16f02f?auto=format&fit=crop&w=800&q=80"
-  },
   {
     id: "lab",
     title: "Diagnostic Pathology Lab",
@@ -883,8 +1019,8 @@ export const FAQS: FAQItem[] = [
     id: "faq-emergency",
     question: "What should I do in case of a critical medical emergency?",
     questionUrdu: "شدید ایمرجنسی کی صورت میں کیا طریقہ کار ہے؟",
-    answer: "Immediately call our 24/7 dedicated Emergency Hotline at 042-111-327-227 or mobile +92 300 1234567. Our fully-equipped cardiac ambulance with paramedical support can be dispatched immediately. If arriving by private vehicle, drive straight to the Emergency entrance on Main Boulevard, Gulberg III.",
-    answerUrdu: "فوری طور پر ہماری 24/7 ایمرجنسی ہیلپ لائن 042-111-327-227 یا موبائل 0300-1234567 پر کال کریں۔ ہماری آئی سی یو ایمبولینس فوری روانہ کی جائے گی۔ ہسپتال پہنچنے پر ایمرجنسی گیٹ سے اندر آئیں۔",
+    answer: "Immediately call our 24/7 dedicated Emergency Hotline at 042-111-327-227 or mobile +92 300 1234567. Our trauma resuscitation team and ICU doctors are ready 24/7. Drive straight to the Emergency entrance on Main Boulevard, Gulberg III.",
+    answerUrdu: "فوری طور پر ہماری 24/7 ایمرجنسی ہیلپ لائن 042-111-327-227 یا موبائل 0300-1234567 پر رابطہ کریں۔ ہسپتال کے ایمرجنسی ٹراما سنٹر میں کنسلٹنٹس 24 گھنٹے الرٹ ہیں۔",
     category: "emergency"
   },
   {
@@ -906,8 +1042,8 @@ export const GALLERY_ITEMS: GalleryItem[] = [
     categoryLabel: "Hospital Exterior & Lobby",
     categoryLabelUrdu: "عمارت و لابی",
     image: "https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=1000&q=80",
-    description: "Architecturally designed multi-storey facility with round-the-clock ambulance bays and welcoming reception.",
-    descriptionUrdu: "24 گھنٹے فعال ایمبولینس بے اور پرسکون ماحول سے آراستہ ریسیپشن لابی۔"
+    description: "Architecturally designed multi-storey facility with round-the-clock emergency entrance and welcoming reception.",
+    descriptionUrdu: "24 گھنٹے فعال ایمرجنسی گیٹ اور پرسکون ماحول سے آراستہ ریسیپشن لابی۔"
   },
   {
     id: "gal-2",
@@ -984,7 +1120,7 @@ export const UI_TRANSLATIONS = {
       bookBtn: "Book Appointment"
     },
     topBar: {
-      emergency247: "24/7 Emergency & Ambulance:",
+      emergency247: "24/7 Emergency Hotline:",
       generalEnquiry: "General:",
       hours: "OPD: Mon-Sat 8AM - 10PM",
       whatsapp: "WhatsApp Us"
@@ -1110,7 +1246,7 @@ export const UI_TRANSLATIONS = {
       badge: "Get In Touch",
       heading: "Contact & Hospital Location",
       subheading: "Conveniently located on Main Boulevard Gulberg III in the heart of Lahore, easily accessible via Canal Road and Ferozepur Road.",
-      emergencyTitle: "24/7 Emergency & Ambulance",
+      emergencyTitle: "24/7 Emergency & Trauma",
       receptionTitle: "Hospital Reception & Appointments",
       emailTitle: "Email Us",
       addressTitle: "Hospital Address",
@@ -1156,7 +1292,7 @@ export const UI_TRANSLATIONS = {
       bookBtn: "اپوائنٹمنٹ بک کریں"
     },
     topBar: {
-      emergency247: "24/7 ایمرجنسی و ایمبولینس:",
+      emergency247: "24/7 ایمرجنسی ہاٹ لائن:",
       generalEnquiry: "معلومات:",
       hours: "او پی ڈی: پیر تا ہفتہ صبح 8 تا رات 10 بجے",
       whatsapp: "واٹس ایپ کریں"
@@ -1282,7 +1418,7 @@ export const UI_TRANSLATIONS = {
       badge: "ہم سے رابطہ کریں",
       heading: "رابطہ نمبرز اور ہسپتال کا پتہ",
       subheading: "مین بلیوارڈ گلبرگ 3 لاہور کے مرکز میں واقع، کینال روڈ اور فیروز پور روڈ سے باآسانی قابلِ رسائی۔",
-      emergencyTitle: "24 گھنٹے ایمرجنسی و ایمبولینس",
+      emergencyTitle: "24 گھنٹے ایمرجنسی و ٹراما",
       receptionTitle: "ہسپتال ریسیپشن و اپوائنٹمنٹس",
       emailTitle: "ہمیں ای میل کریں",
       addressTitle: "ہسپتال کا پتہ",

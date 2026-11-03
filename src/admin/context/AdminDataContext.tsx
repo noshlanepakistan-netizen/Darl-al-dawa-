@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import {
   AdminAppointment,
   PatientRecord,
@@ -8,6 +8,7 @@ import {
   StaffUser,
   ActivityLogItem,
   HospitalSettings,
+  HomepageSettings,
   AppointmentStatus
 } from '../types';
 import {
@@ -15,11 +16,17 @@ import {
   Department,
   HealthPackage,
   ServiceFacility,
+  GalleryItem,
+  Testimonial,
+  FAQItem,
   DOCTORS as INITIAL_DOCTORS,
   DEPARTMENTS as INITIAL_DEPARTMENTS,
   HEALTH_PACKAGES as INITIAL_PACKAGES,
   SERVICES_FACILITIES as INITIAL_SERVICES,
-  HOSPITAL_CONFIG as INITIAL_CONFIG
+  HOSPITAL_CONFIG as INITIAL_CONFIG,
+  GALLERY_ITEMS as INITIAL_GALLERY,
+  TESTIMONIALS as INITIAL_TESTIMONIALS,
+  FAQS as INITIAL_FAQS
 } from '../../data/hospitalData';
 import {
   INITIAL_APPOINTMENTS,
@@ -32,7 +39,7 @@ import {
   INITIAL_HOSPITAL_SETTINGS
 } from '../data/sampleAdminData';
 import { db } from '../../firebase/config';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface Toast {
   id: string;
@@ -40,14 +47,49 @@ interface Toast {
   type: 'success' | 'error' | 'info';
 }
 
+export const INITIAL_HOMEPAGE_SETTINGS: HomepageSettings = {
+  heroHeading: "Caring for You, Every Step of the Way",
+  heroSubheading: "Experience world-class medical treatments in Gulberg, Lahore. Equipped with 24/7 rapid emergency, 50+ senior specialist consultants, laminar-flow theatres, and certified diagnostic laboratories.",
+  heroButtonText: "Book an Appointment",
+  heroSliderImages: [
+    "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=1200&q=80"
+  ],
+  aboutBadge: "About Dar al Dawa",
+  aboutHeading: "A Tradition of Healing, Science & Human Compassion",
+  aboutSubheading: "Established in Lahore over two decades ago, Dar al Dawa Medical Center stands as a beacon of clinical excellence and compassionate healthcare.",
+  aboutMission: "To provide ethical, evidence-based, and accessible tertiary healthcare of international standards to all communities of Punjab, regardless of socioeconomic background.",
+  aboutVision: "To be Pakistan's most trusted hospital network, recognized for clinical excellence, state-of-the-art medical technology, and patient-first empathy.",
+  aboutImage: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1000&q=80",
+  sectionsVisibility: {
+    hero: true,
+    appointment: true,
+    departments: true,
+    doctors: true,
+    services: true,
+    packages: true,
+    about: true,
+    testimonials: true,
+    gallery: true,
+    blog: true,
+    faq: true,
+    contact: true
+  }
+};
+
 interface AdminDataContextType {
   // Hospital Config
   hospitalConfig: typeof INITIAL_CONFIG;
   updateHospitalConfig: (newConfig: Partial<typeof INITIAL_CONFIG>) => void;
 
-  // Settings
+  // Operational Settings
   settings: HospitalSettings;
   updateSettings: (newSettings: Partial<HospitalSettings>) => void;
+
+  // Homepage Settings
+  homepageSettings: HomepageSettings;
+  updateHomepageSettings: (newSettings: Partial<HomepageSettings>) => void;
 
   // Appointments
   appointments: AdminAppointment[];
@@ -60,6 +102,7 @@ interface AdminDataContextType {
   addDoctor: (doc: Omit<Doctor, 'id'>) => void;
   updateDoctor: (id: string, doc: Partial<Doctor>) => void;
   deleteDoctor: (id: string) => void;
+  toggleDoctorActive: (id: string) => void;
 
   // Departments
   departments: Department[];
@@ -74,6 +117,26 @@ interface AdminDataContextType {
   updatePackage: (id: string, pkg: Partial<HealthPackage>) => void;
   deletePackage: (id: string) => void;
   services: ServiceFacility[];
+  addService: (srv: Omit<ServiceFacility, 'id'>) => void;
+  updateService: (id: string, srv: Partial<ServiceFacility>) => void;
+  deleteService: (id: string) => void;
+
+  // Gallery
+  gallery: GalleryItem[];
+  addGalleryItem: (item: Omit<GalleryItem, 'id'>) => void;
+  deleteGalleryItem: (id: string) => void;
+
+  // Testimonials
+  testimonials: Testimonial[];
+  addTestimonial: (item: Omit<Testimonial, 'id'>) => void;
+  updateTestimonial: (id: string, item: Partial<Testimonial>) => void;
+  deleteTestimonial: (id: string) => void;
+
+  // FAQs
+  faqs: FAQItem[];
+  addFaq: (item: Omit<FAQItem, 'id'>) => void;
+  updateFaq: (id: string, item: Partial<FAQItem>) => void;
+  deleteFaq: (id: string) => void;
 
   // Patients
   patients: PatientRecord[];
@@ -143,11 +206,20 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // State slices
   const [hospitalConfig, setHospitalConfig] = useState(() => getStored('config', INITIAL_CONFIG));
   const [settings, setSettings] = useState(() => getStored('settings', INITIAL_HOSPITAL_SETTINGS));
+  const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(() => getStored('homepage_settings', INITIAL_HOMEPAGE_SETTINGS));
   const [appointments, setAppointments] = useState(() => getStored('appointments', INITIAL_APPOINTMENTS));
-  const [doctors, setDoctors] = useState(() => getStored('doctors', INITIAL_DOCTORS));
+  const [doctors, setDoctors] = useState<Doctor[]>(() => {
+    const stored = getStored('doctors', INITIAL_DOCTORS);
+    const existingIds = new Set(stored.map((d: Doctor) => d.id));
+    const missing = INITIAL_DOCTORS.filter((d) => !existingIds.has(d.id));
+    return missing.length > 0 ? [...stored, ...missing] : stored;
+  });
   const [departments, setDepartments] = useState(() => getStored('departments', INITIAL_DEPARTMENTS));
   const [packages, setPackages] = useState(() => getStored('packages', INITIAL_PACKAGES));
-  const [services, setServices] = useState(() => getStored('services', INITIAL_SERVICES));
+  const [services, setServices] = useState<ServiceFacility[]>(() => getStored('services', INITIAL_SERVICES));
+  const [gallery, setGallery] = useState<GalleryItem[]>(() => getStored('gallery', INITIAL_GALLERY));
+  const [testimonials, setTestimonials] = useState<Testimonial[]>(() => getStored('testimonials', INITIAL_TESTIMONIALS));
+  const [faqs, setFaqs] = useState<FAQItem[]>(() => getStored('faqs', INITIAL_FAQS));
   const [patients, setPatients] = useState(() => getStored('patients', INITIAL_PATIENTS));
   const [labReports, setLabReports] = useState(() => getStored('lab_reports', INITIAL_LAB_REPORTS));
   const [invoices, setInvoices] = useState(() => getStored('invoices', INITIAL_INVOICES));
@@ -196,14 +268,14 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  // Hospital Config
+  // Hospital Config (General Settings)
   const updateHospitalConfig = (newConfig: Partial<typeof INITIAL_CONFIG>) => {
     const updated = { ...hospitalConfig, ...newConfig };
     setHospitalConfig(updated);
     saveStored('config', updated);
     syncToFirestore('hospital_config', 'main', updated);
-    logAction('Updated Website Content', 'CMS', 'Hospital configuration and public content updated.');
-    showToast('Hospital configuration updated successfully!');
+    logAction('Updated General Settings', 'Settings', 'Hospital details, contact info, or branding updated.');
+    showToast('General hospital settings saved successfully!');
   };
 
   // Settings
@@ -214,6 +286,23 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     syncToFirestore('hospital_config', 'settings', updated);
     logAction('Updated System Settings', 'Settings', 'Operational settings and parameters modified.');
     showToast('Settings saved successfully!');
+  };
+
+  // Homepage Settings
+  const updateHomepageSettings = (newSettings: Partial<HomepageSettings>) => {
+    const updated: HomepageSettings = {
+      ...homepageSettings,
+      ...newSettings,
+      sectionsVisibility: {
+        ...homepageSettings.sectionsVisibility,
+        ...(newSettings.sectionsVisibility || {})
+      }
+    };
+    setHomepageSettings(updated);
+    saveStored('homepage_settings', updated);
+    syncToFirestore('hospital_config', 'homepage', updated);
+    logAction('Updated Homepage Settings', 'Settings', 'Hero, About, and section visibility updated.');
+    showToast('Homepage settings saved successfully!');
   };
 
   // Appointments
@@ -257,7 +346,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Doctors
   const addDoctor = (docItem: Omit<Doctor, 'id'>) => {
     const id = `doc-${Date.now()}`;
-    const newDoctor: Doctor = { ...docItem, id };
+    const newDoctor: Doctor = { ...docItem, id, active: docItem.active !== false };
     const updated = [...doctors, newDoctor];
     setDoctors(updated);
     saveStored('doctors', updated);
@@ -281,6 +370,15 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     saveStored('doctors', updated);
     logAction('Removed Doctor', 'Doctors', `Doctor ${id} removed from faculty.`);
     showToast('Doctor removed.', 'info');
+  };
+
+  const toggleDoctorActive = (id: string) => {
+    const updated = doctors.map((d) => (d.id === id ? { ...d, active: d.active === false ? true : false } : d));
+    setDoctors(updated);
+    saveStored('doctors', updated);
+    const docItem = updated.find((d) => d.id === id);
+    logAction('Doctor Status Changed', 'Doctors', `Doctor ${docItem?.name || id} is now ${docItem?.active ? 'Active' : 'Inactive'}.`);
+    showToast(`Doctor ${docItem?.name || id} is now ${docItem?.active ? 'Active' : 'Inactive'}.`);
   };
 
   // Departments
@@ -316,6 +414,95 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDepartments(newOrder);
     saveStored('departments', newOrder);
     showToast('Departments order saved!');
+  };
+
+  // Services
+  const addService = (srv: Omit<ServiceFacility, 'id'>) => {
+    const id = `srv-${Date.now()}`;
+    const newSrv: ServiceFacility = { ...srv, id };
+    const updated = [...services, newSrv];
+    setServices(updated);
+    saveStored('services', updated);
+    showToast('Service added successfully!');
+  };
+
+  const updateService = (id: string, srvData: Partial<ServiceFacility>) => {
+    const updated = services.map((s) => (s.id === id ? { ...s, ...srvData } : s));
+    setServices(updated);
+    saveStored('services', updated);
+    showToast('Service updated successfully!');
+  };
+
+  const deleteService = (id: string) => {
+    const updated = services.filter((s) => s.id !== id);
+    setServices(updated);
+    saveStored('services', updated);
+    showToast('Service removed.', 'info');
+  };
+
+  // Gallery
+  const addGalleryItem = (item: Omit<GalleryItem, 'id'>) => {
+    const id = `gal-${Date.now()}`;
+    const newItem: GalleryItem = { ...item, id };
+    const updated = [...gallery, newItem];
+    setGallery(updated);
+    saveStored('gallery', updated);
+    showToast('Gallery image added!');
+  };
+
+  const deleteGalleryItem = (id: string) => {
+    const updated = gallery.filter((g) => g.id !== id);
+    setGallery(updated);
+    saveStored('gallery', updated);
+    showToast('Gallery image removed.', 'info');
+  };
+
+  // Testimonials
+  const addTestimonial = (item: Omit<Testimonial, 'id'>) => {
+    const id = `test-${Date.now()}`;
+    const newItem: Testimonial = { ...item, id };
+    const updated = [...testimonials, newItem];
+    setTestimonials(updated);
+    saveStored('testimonials', updated);
+    showToast('Testimonial added!');
+  };
+
+  const updateTestimonial = (id: string, itemData: Partial<Testimonial>) => {
+    const updated = testimonials.map((t) => (t.id === id ? { ...t, ...itemData } : t));
+    setTestimonials(updated);
+    saveStored('testimonials', updated);
+    showToast('Testimonial updated!');
+  };
+
+  const deleteTestimonial = (id: string) => {
+    const updated = testimonials.filter((t) => t.id !== id);
+    setTestimonials(updated);
+    saveStored('testimonials', updated);
+    showToast('Testimonial deleted.', 'info');
+  };
+
+  // FAQs
+  const addFaq = (item: Omit<FAQItem, 'id'>) => {
+    const id = `faq-${Date.now()}`;
+    const newItem: FAQItem = { ...item, id };
+    const updated = [...faqs, newItem];
+    setFaqs(updated);
+    saveStored('faqs', updated);
+    showToast('FAQ added!');
+  };
+
+  const updateFaq = (id: string, itemData: Partial<FAQItem>) => {
+    const updated = faqs.map((f) => (f.id === id ? { ...f, ...itemData } : f));
+    setFaqs(updated);
+    saveStored('faqs', updated);
+    showToast('FAQ updated!');
+  };
+
+  const deleteFaq = (id: string) => {
+    const updated = faqs.filter((f) => f.id !== id);
+    setFaqs(updated);
+    saveStored('faqs', updated);
+    showToast('FAQ removed.', 'info');
   };
 
   // Packages
@@ -501,11 +688,15 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const fullBackup = {
       hospitalConfig,
       settings,
+      homepageSettings,
       appointments,
       doctors,
       departments,
       packages,
       services,
+      gallery,
+      testimonials,
+      faqs,
       patients,
       labReports,
       invoices,
@@ -521,10 +712,16 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       const parsed = JSON.parse(jsonData);
       if (parsed.hospitalConfig) setHospitalConfig(parsed.hospitalConfig);
+      if (parsed.settings) setSettings(parsed.settings);
+      if (parsed.homepageSettings) setHomepageSettings(parsed.homepageSettings);
       if (parsed.appointments) setAppointments(parsed.appointments);
       if (parsed.doctors) setDoctors(parsed.doctors);
       if (parsed.departments) setDepartments(parsed.departments);
       if (parsed.packages) setPackages(parsed.packages);
+      if (parsed.services) setServices(parsed.services);
+      if (parsed.gallery) setGallery(parsed.gallery);
+      if (parsed.testimonials) setTestimonials(parsed.testimonials);
+      if (parsed.faqs) setFaqs(parsed.faqs);
       if (parsed.patients) setPatients(parsed.patients);
       if (parsed.labReports) setLabReports(parsed.labReports);
       if (parsed.invoices) setInvoices(parsed.invoices);
@@ -532,7 +729,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       logAction('Restored Data from Backup', 'Settings', 'Database restored from imported JSON file.');
       showToast('Database successfully restored from JSON backup!');
       return true;
-    } catch (e) {
+    } catch {
       showToast('Invalid backup JSON file.', 'error');
       return false;
     }
@@ -545,6 +742,8 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updateHospitalConfig,
         settings,
         updateSettings,
+        homepageSettings,
+        updateHomepageSettings,
         appointments,
         addAppointment,
         updateAppointmentStatus,
@@ -553,6 +752,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         addDoctor,
         updateDoctor,
         deleteDoctor,
+        toggleDoctorActive,
         departments,
         addDepartment,
         updateDepartment,
@@ -563,6 +763,20 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updatePackage,
         deletePackage,
         services,
+        addService,
+        updateService,
+        deleteService,
+        gallery,
+        addGalleryItem,
+        deleteGalleryItem,
+        testimonials,
+        addTestimonial,
+        updateTestimonial,
+        deleteTestimonial,
+        faqs,
+        addFaq,
+        updateFaq,
+        deleteFaq,
         patients,
         addPatient,
         updatePatient,

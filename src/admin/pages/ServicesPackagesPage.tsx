@@ -13,6 +13,7 @@ import {
   Building
 } from 'lucide-react';
 import { HealthPackage } from '../../data/hospitalData';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 interface ServicesPackagesPageProps {
   lang: 'en' | 'ur';
@@ -25,6 +26,7 @@ export const ServicesPackagesPage: React.FC<ServicesPackagesPageProps> = ({ lang
   const [activeTab, setActiveTab] = useState<'packages' | 'services'>('packages');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HealthPackage | null>(null);
 
   // Package Form
   const [title, setTitle] = useState('');
@@ -234,11 +236,7 @@ export const ServicesPackagesPage: React.FC<ServicesPackagesPageProps> = ({ lang
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (window.confirm(`Delete package ${pkg.title}?`)) {
-                        deletePackage(pkg.id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget(pkg)}
                     className="p-1.5 rounded-lg bg-red-50 text-[#D62828] hover:bg-[#D62828] hover:text-white transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -395,6 +393,20 @@ export const ServicesPackagesPage: React.FC<ServicesPackagesPageProps> = ({ lang
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Health Package?"
+        message={`Are you sure you want to delete "${deleteTarget?.title}"?`}
+        itemName={deleteTarget?.title}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deletePackage(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

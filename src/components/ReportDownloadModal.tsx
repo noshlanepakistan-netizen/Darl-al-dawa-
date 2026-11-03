@@ -57,12 +57,17 @@ export const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
 
         {/* Modal Header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#1E5AA8] mx-auto flex items-center justify-center mb-3 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-[#2E9E5B] border border-emerald-200 mx-auto flex items-center justify-center mb-3 shadow-xs">
             <FileCheck2 className="w-6 h-6" />
           </div>
           <h2 className={`text-xl sm:text-2xl font-bold text-slate-900 ${isUrdu ? 'font-urdu' : 'font-heading'}`}>
-            {isUrdu ? 'آن لائن تشخیصی لیب رپورٹ ڈاؤن لوڈ' : 'Download Your Lab Report'}
+            {isUrdu ? (
+              <span>آن لائن تشخیصی <span className="text-[#2E9E5B]">لیب رپورٹ ڈاؤن لوڈ</span></span>
+            ) : (
+              <span>Download Your <span className="text-[#2E9E5B]">Lab Report</span></span>
+            )}
           </h2>
+          <div className="w-10 h-0.5 bg-[#2E9E5B] rounded-full mx-auto mt-2 mb-1" />
           <p className="text-xs text-slate-500 mt-1">
             {isUrdu
               ? 'رپورٹ آئی ڈی اور رجسٹرڈ موبائل نمبر درج کر کے تصدیق شدہ پی ڈی ایف حاصل کریں۔'

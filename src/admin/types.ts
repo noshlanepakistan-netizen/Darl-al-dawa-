@@ -138,3 +138,32 @@ export interface HospitalSettings {
   whatsappConfirmation: boolean;
   currency: string;
 }
+
+export interface HomepageSettings {
+  heroHeading: string;
+  heroSubheading: string;
+  heroButtonText: string;
+  heroSliderImages: string[];
+  aboutBadge: string;
+  aboutHeading: string;
+  aboutSubheading: string;
+  aboutMission: string;
+  aboutVision: string;
+  aboutImage: string;
+  sectionsVisibility: {
+    hero: boolean;
+    appointment: boolean;
+    departments: boolean;
+    doctors: boolean;
+    services: boolean;
+    packages: boolean;
+    about: boolean;
+    testimonials: boolean;
+    gallery: boolean;
+    blog: boolean;
+    faq: boolean;
+    contact: boolean;
+  };
+}
+
+

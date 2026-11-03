@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { CalendarCheck, PhoneCall, ShieldCheck, Clock, Users, Award, CheckCircle2, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CalendarCheck, PhoneCall, ShieldCheck, Clock, Users, Award, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { HOSPITAL_CONFIG, DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface HeroProps {
   lang: 'en' | 'ur';
@@ -15,6 +16,28 @@ export const Hero: React.FC<HeroProps> = ({
 }) => {
   const t = UI_TRANSLATIONS[lang].hero;
   const isUrdu = lang === 'ur';
+  const { homepageSettings, hospitalConfig } = useAdminData();
+
+  const heroHeading = homepageSettings?.heroHeading || (isUrdu ? 'دار الدواء میڈیکل سنٹر' : 'Caring for You, Every Step of the Way');
+  const heroSubtitle = homepageSettings?.heroSubheading || t.subtitle;
+  const heroBtnText = homepageSettings?.heroButtonText || t.bookAppointmentBtn;
+  const sliderImages = homepageSettings?.heroSliderImages?.length
+    ? homepageSettings.heroSliderImages
+    : [
+        "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=1200&q=80"
+      ];
+
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  useEffect(() => {
+    if (sliderImages.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveSlide((prev) => (prev + 1) % sliderImages.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [sliderImages.length]);
 
   // Quick form state
   const [quickName, setQuickName] = useState('');
@@ -36,33 +59,110 @@ export const Hero: React.FC<HeroProps> = ({
   };
 
   return (
-    <section id="home" className="relative bg-gradient-to-b from-blue-50/70 via-white to-[#F7FAFC] pt-6 pb-16 md:py-16 overflow-hidden">
+    <section id="home" className="relative bg-gradient-to-b from-blue-50/70 via-white to-[#F7FAFC] pt-4 pb-14 md:py-14 overflow-hidden">
       {/* Decorative subtle medical background elements */}
       <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-blue-100/50 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-emerald-100/40 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 relative space-y-8">
+        {/* Banner Slider */}
+        {sliderImages.length > 0 && (
+          <div className="relative w-full h-44 sm:h-64 md:h-80 rounded-2xl md:rounded-3xl overflow-hidden shadow-lg border border-slate-200/80 group">
+            {sliderImages.map((img, idx) => (
+              <div
+                key={idx}
+                className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                  idx === activeSlide ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+                }`}
+              >
+                <img
+                  src={img}
+                  alt={`Banner ${idx + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-slate-900/20 to-transparent flex items-end p-5 md:p-8">
+                  <div className="text-white max-w-xl">
+                    <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-emerald-400 bg-black/40 px-2.5 py-1 rounded-full border border-emerald-400/30">
+                      {hospitalConfig?.name || "Dar al Dawa Medical Center"}
+                    </span>
+                    <h3 className="text-base sm:text-xl md:text-2xl font-bold mt-2 drop-shadow-sm line-clamp-1">
+                      {heroHeading}
+                    </h3>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {sliderImages.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveSlide((prev) => (prev - 1 + sliderImages.length) % sliderImages.length)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-colors cursor-pointer"
+                  title="Previous image"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSlide((prev) => (prev + 1) % sliderImages.length)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-colors cursor-pointer"
+                  title="Next image"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+
+                <div className="absolute bottom-3 right-5 z-20 flex items-center gap-1.5">
+                  {sliderImages.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveSlide(idx)}
+                      className={`h-2 rounded-full transition-all cursor-pointer ${
+                        idx === activeSlide ? 'w-6 bg-emerald-400' : 'w-2 bg-white/60 hover:bg-white'
+                      }`}
+                      title={`Go to slide ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           
           {/* Left Column: Headlines, Trust badges & Action CTAs */}
-          <div className="lg:col-span-7 space-y-6 text-left">
+          <div className="lg:col-span-7 space-y-5 text-left">
             {/* Location & Accreditation chip */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-100/80 border border-blue-200 text-[#1E5AA8] text-xs font-semibold shadow-xs">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[#2E9E5B] text-xs font-semibold shadow-xs">
               <ShieldCheck className="w-4 h-4 text-[#2E9E5B]" />
               <span className={isUrdu ? 'font-urdu' : ''}>{t.badge}</span>
             </div>
 
             {/* Main Headline */}
-            <h1 className={`text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-bold text-slate-900 leading-[1.2] ${isUrdu ? 'font-urdu text-4xl sm:text-5xl leading-[1.6]' : 'font-heading'}`}>
-              <span className="text-[#1E5AA8]">{isUrdu ? 'دار الدواء' : 'Caring for You,'}</span>{' '}
-              <span className="text-slate-900">
-                {isUrdu ? 'ہر قدم پر آپ کی صحت اور دیکھ بھال کا امین' : 'Every Step of the Way'}
-              </span>
+            <h1 className={`text-2xl sm:text-3xl md:text-4xl lg:text-[2.75rem] font-bold text-slate-900 leading-[1.2] ${isUrdu ? 'font-urdu text-3xl sm:text-4xl leading-[1.6]' : 'font-heading'}`}>
+              {homepageSettings?.heroHeading ? (
+                <span className="text-slate-900">
+                  {heroHeading.split(' ').slice(0, -2).join(' ')}{' '}
+                  <span className="text-[#2E9E5B]">{heroHeading.split(' ').slice(-2).join(' ')}</span>
+                </span>
+              ) : isUrdu ? (
+                <span>
+                  <span className="text-[#1E5AA8]">ہر قدم پر آپ کی صحت اور </span>
+                  <span className="text-[#2E9E5B]">دیکھ بھال کا امین</span>
+                </span>
+              ) : (
+                <span>
+                  <span className="text-[#1E5AA8]">Caring for You, </span>
+                  <span className="text-[#2E9E5B]">Every Step of the Way</span>
+                </span>
+              )}
             </h1>
 
             {/* Subtitle */}
-            <p className={`text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl ${isUrdu ? 'font-urdu text-lg leading-loose' : 'font-body'}`}>
-              {t.subtitle}
+            <p className={`text-sm sm:text-base text-slate-600 leading-relaxed max-w-2xl ${isUrdu ? 'font-urdu text-base leading-loose' : 'font-body'}`}>
+              {heroSubtitle}
             </p>
 
             {/* Primary Action Buttons */}
@@ -70,10 +170,10 @@ export const Hero: React.FC<HeroProps> = ({
               <button
                 onClick={onNavigateToAppointment}
                 type="button"
-                className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-semibold text-base shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
               >
-                <CalendarCheck className="w-5 h-5" />
-                <span className={isUrdu ? 'font-urdu' : ''}>{t.bookAppointmentBtn}</span>
+                <CalendarCheck className="w-4 h-4" />
+                <span className={isUrdu ? 'font-urdu' : ''}>{heroBtnText}</span>
               </button>
 
               <a
@@ -114,8 +214,12 @@ export const Hero: React.FC<HeroProps> = ({
               <div className="relative bg-white rounded-2xl p-6 sm:p-7 shadow-xl border border-slate-100">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
                   <div>
-                    <h3 className={`text-xl font-bold text-[#1E5AA8] ${isUrdu ? 'font-urdu text-xl' : 'font-heading'}`}>
-                      {t.quickBookingTitle}
+                    <h3 className={`text-xl font-bold text-slate-900 ${isUrdu ? 'font-urdu text-xl' : 'font-heading'}`}>
+                      {isUrdu ? (
+                        <span>فوری <span className="text-[#2E9E5B]">اپوائنٹمنٹ</span></span>
+                      ) : (
+                        <span>Quick <span className="text-[#2E9E5B]">Appointment</span></span>
+                      )}
                     </h3>
                     <p className={`text-xs text-slate-500 mt-0.5 ${isUrdu ? 'font-urdu' : ''}`}>
                       {t.quickBookingSub}

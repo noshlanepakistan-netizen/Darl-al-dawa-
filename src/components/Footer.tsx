@@ -100,8 +100,9 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
 
           {/* Col 2: Quick Links (2.5 cols) */}
           <div className="lg:col-span-2 space-y-4">
-            <h4 className={`text-sm font-bold text-white uppercase tracking-wider ${isUrdu ? 'font-urdu text-base' : 'font-heading'}`}>
-              {t.quickLinks}
+            <h4 className={`text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 ${isUrdu ? 'font-urdu text-base' : 'font-heading'}`}>
+              <span className="w-1.5 h-3.5 bg-[#2E9E5B] rounded-full inline-block" />
+              <span>{t.quickLinks}</span>
             </h4>
             <ul className="space-y-2 text-xs sm:text-sm">
               {[
@@ -121,7 +122,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
                     onClick={(e) => handleNavClick(e, item.id)}
                     className="hover:text-white transition-colors flex items-center gap-1.5 text-slate-400 hover:text-emerald-400"
                   >
-                    <ChevronRight className={`w-3.5 h-3.5 text-slate-600 ${isUrdu ? 'rotate-180' : ''}`} />
+                    <ChevronRight className={`w-3.5 h-3.5 text-[#2E9E5B] ${isUrdu ? 'rotate-180' : ''}`} />
                     <span>{item.label}</span>
                   </a>
                 </li>
@@ -131,8 +132,9 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
 
           {/* Col 3: Key Departments (2.5 cols) */}
           <div className="lg:col-span-3 space-y-4">
-            <h4 className={`text-sm font-bold text-white uppercase tracking-wider ${isUrdu ? 'font-urdu text-base' : 'font-heading'}`}>
-              {t.departmentsList}
+            <h4 className={`text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 ${isUrdu ? 'font-urdu text-base' : 'font-heading'}`}>
+              <span className="w-1.5 h-3.5 bg-[#2E9E5B] rounded-full inline-block" />
+              <span>{t.departmentsList}</span>
             </h4>
             <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
               {DEPARTMENTS.slice(0, 7).map((dept) => (
@@ -154,8 +156,9 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
 
           {/* Col 4: Contact & Hours (3 cols) */}
           <div className="lg:col-span-3 space-y-4">
-            <h4 className={`text-sm font-bold text-white uppercase tracking-wider ${isUrdu ? 'font-urdu text-base' : 'font-heading'}`}>
-              {t.contactInfo}
+            <h4 className={`text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 ${isUrdu ? 'font-urdu text-base' : 'font-heading'}`}>
+              <span className="w-1.5 h-3.5 bg-[#2E9E5B] rounded-full inline-block" />
+              <span>{t.contactInfo}</span>
             </h4>
             
             <div className="space-y-3 text-xs sm:text-sm text-slate-400">
@@ -170,7 +173,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
                 <Phone className="w-4 h-4 text-[#D62828] flex-shrink-0" />
                 <div>
                   <span className="text-white font-mono font-bold block">{HOSPITAL_CONFIG.contact.emergencyNumber}</span>
-                  <span className="text-[11px] text-slate-400">{isUrdu ? '24/7 ایمرجنسی و ایمبولینس' : '24/7 Emergency & Ambulance'}</span>
+                  <span className="text-[11px] text-slate-400">{isUrdu ? '24/7 ایمرجنسی ہاٹ لائن' : '24/7 Emergency & Trauma'}</span>
                 </div>
               </div>
 
