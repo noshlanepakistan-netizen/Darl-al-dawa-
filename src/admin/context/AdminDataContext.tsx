@@ -39,6 +39,13 @@ import {
   INITIAL_HOSPITAL_SETTINGS
 } from '../data/sampleAdminData';
 import { supabase, isSupabaseConfigured } from '../../supabase/config';
+import {
+  cleanWhatsAppNumber,
+  formatDisplayPhone,
+  cleanPhoneEmergency,
+  formatTelLink
+} from '../../utils/phoneUtils';
+
 
 interface Toast {
   id: string;
@@ -260,8 +267,62 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // ============================================================================
-  // SUPABASE DATA FETCHING
+  // SUPABASE DATA FETCHING & HELPER
   // ============================================================================
+
+  const mapSettingsRowToHospitalConfig = (configData: any, prev: typeof INITIAL_CONFIG): typeof INITIAL_CONFIG => {
+    const contact = (configData.contact && typeof configData.contact === 'object') ? configData.contact : {};
+    const social = (configData.social_links && typeof configData.social_links === 'object') ? configData.social_links : {};
+
+    const rawEmergency = configData.phone_emergency || contact.emergencyNumber || prev.contact.emergencyNumber;
+    const emergencyClean = formatDisplayPhone(rawEmergency);
+    const emergencyRaw = cleanPhoneEmergency(rawEmergency);
+
+    const rawWhatsapp = configData.whatsapp_number || contact.whatsapp || prev.contact.whatsapp;
+    const whatsappClean = cleanWhatsAppNumber(rawWhatsapp);
+
+    return {
+      ...prev,
+      name: configData.name || prev.name,
+      nameUrdu: configData.name_urdu || prev.nameUrdu,
+      tagline: configData.tagline || prev.tagline,
+      taglineUrdu: configData.tagline_urdu || prev.taglineUrdu,
+      logo: configData.logo || prev.logo,
+      favicon: configData.favicon || prev.favicon,
+      shortDesc: configData.short_desc || prev.shortDesc,
+      shortDescUrdu: configData.short_desc_urdu || prev.shortDescUrdu,
+      socialLinks: {
+        facebook: configData.facebook_url || social.facebook || prev.socialLinks?.facebook || 'https://facebook.com/daraldawamedical',
+        instagram: configData.instagram_url || social.instagram || prev.socialLinks?.instagram || 'https://instagram.com/daraldawamedical',
+        youtube: configData.youtube_url || social.youtube || prev.socialLinks?.youtube || 'https://youtube.com/@daraldawamedical',
+        tiktok: configData.tiktok_url || social.tiktok || prev.socialLinks?.tiktok || 'https://tiktok.com/@daraldawamedical',
+        twitter: configData.twitter_url || social.twitter || prev.socialLinks?.twitter || 'https://twitter.com/daraldawamedical',
+      },
+      contact: {
+        ...prev.contact,
+        ...contact,
+        emergencyNumber: emergencyClean,
+        emergencyNumberRaw: emergencyRaw,
+        receptionPhone: configData.phone_reception || contact.receptionPhone || prev.contact.receptionPhone,
+        mobileEmergency: configData.phone_mobile || contact.mobileEmergency || prev.contact.mobileEmergency,
+        whatsapp: rawWhatsapp,
+        whatsappClean: whatsappClean,
+        email: configData.email || contact.email || prev.contact.email,
+        address: configData.address || contact.address || prev.contact.address,
+        addressUrdu: configData.address_urdu || contact.addressUrdu || prev.contact.addressUrdu,
+        googleMapsEmbedUrl: configData.google_maps_url || contact.googleMapsEmbedUrl || prev.contact.googleMapsEmbedUrl,
+        hours: {
+          ...prev.contact.hours,
+          ...(contact.hours || {}),
+          opd: configData.hours_opd || contact.hours?.opd || prev.contact.hours.opd,
+          emergency: configData.hours_emergency || contact.hours?.emergency || prev.contact.hours.emergency,
+        }
+      },
+      trustStats: prev.trustStats,
+      accreditations: prev.accreditations,
+      insurancePartners: prev.insurancePartners
+    };
+  };
 
   const fetchSupabaseData = useCallback(async () => {
     if (!isSupabaseActive) {
@@ -272,28 +333,31 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       setIsLoading(true);
 
-      // 1. Hospital Settings
-      const { data: configData } = await supabase.from('hospital_settings').select('*').eq('id', 'main').single();
-      if (configData) {
-        setHospitalConfig({
-          name: configData.name || INITIAL_CONFIG.name,
-          nameUrdu: configData.name_urdu || INITIAL_CONFIG.nameUrdu,
-          tagline: configData.tagline || INITIAL_CONFIG.tagline,
-          taglineUrdu: configData.tagline_urdu || INITIAL_CONFIG.taglineUrdu,
-          logo: configData.logo || INITIAL_CONFIG.logo,
-          favicon: configData.favicon || INITIAL_CONFIG.favicon,
-          shortDesc: configData.short_desc || INITIAL_CONFIG.shortDesc,
-          shortDescUrdu: configData.short_desc_urdu || INITIAL_CONFIG.shortDescUrdu,
-          socialLinks: configData.social_links || INITIAL_CONFIG.socialLinks,
-          contact: configData.contact || INITIAL_CONFIG.contact,
-          trustStats: INITIAL_CONFIG.trustStats,
-          accreditations: INITIAL_CONFIG.accreditations,
-          insurancePartners: INITIAL_CONFIG.insurancePartners
-        });
+      // 1. Settings (Check 'settings' table first, fallback to 'hospital_settings')
+      let loadedSettings = false;
+      try {
+        const { data: sData, error: sErr } = await supabase.from('settings').select('*').limit(1).maybeSingle();
+        if (sData && !sErr) {
+          setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(sData, prev));
+          loadedSettings = true;
+        }
+      } catch (err) {
+        console.warn('Could not query settings table:', err);
+      }
+
+      if (!loadedSettings) {
+        try {
+          const { data: configData } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
+          if (configData) {
+            setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(configData, prev));
+          }
+        } catch (err) {
+          console.warn('Could not query hospital_settings table:', err);
+        }
       }
 
       // 2. Operational Settings
-      const { data: opData } = await supabase.from('operational_settings').select('*').eq('id', 'main').single();
+      const { data: opData } = await supabase.from('operational_settings').select('*').eq('id', 'main').maybeSingle();
       if (opData) {
         setSettings({
           slotDurationMinutes: opData.slot_duration_minutes ?? INITIAL_HOSPITAL_SETTINGS.slotDurationMinutes,
@@ -309,23 +373,49 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
       }
 
-      // 3. Homepage Settings
-      const { data: homeData } = await supabase.from('homepage_settings').select('*').eq('id', 'main').single();
-      if (homeData) {
-        setHomepageSettings({
-          heroHeading: homeData.hero_heading || INITIAL_HOMEPAGE_SETTINGS.heroHeading,
-          heroSubheading: homeData.hero_subheading || INITIAL_HOMEPAGE_SETTINGS.heroSubheading,
-          heroButtonText: homeData.hero_button_text || INITIAL_HOMEPAGE_SETTINGS.heroButtonText,
-          heroSliderImages: homeData.hero_slider_images || INITIAL_HOMEPAGE_SETTINGS.heroSliderImages,
-          aboutBadge: homeData.about_badge || INITIAL_HOMEPAGE_SETTINGS.aboutBadge,
-          aboutHeading: homeData.about_heading || INITIAL_HOMEPAGE_SETTINGS.aboutHeading,
-          aboutSubheading: homeData.about_subheading || INITIAL_HOMEPAGE_SETTINGS.aboutSubheading,
-          aboutMission: homeData.about_mission || INITIAL_HOMEPAGE_SETTINGS.aboutMission,
-          aboutVision: homeData.about_vision || INITIAL_HOMEPAGE_SETTINGS.aboutVision,
-          aboutImage: homeData.about_image || INITIAL_HOMEPAGE_SETTINGS.aboutImage,
-          sectionsVisibility: homeData.sections_visibility || INITIAL_HOMEPAGE_SETTINGS.sectionsVisibility
-        });
+      // 3. Homepage Content / Settings (Check 'homepage_content' first, fallback to 'homepage_settings')
+      let loadedHome = false;
+      try {
+        const { data: hcData } = await supabase.from('homepage_content').select('*').limit(1).maybeSingle();
+        if (hcData) {
+          setHomepageSettings({
+            heroHeading: hcData.hero_heading || INITIAL_HOMEPAGE_SETTINGS.heroHeading,
+            heroSubheading: hcData.hero_subheading || INITIAL_HOMEPAGE_SETTINGS.heroSubheading,
+            heroButtonText: hcData.hero_button_text || INITIAL_HOMEPAGE_SETTINGS.heroButtonText,
+            heroSliderImages: hcData.hero_slider_images || INITIAL_HOMEPAGE_SETTINGS.heroSliderImages,
+            aboutBadge: hcData.about_badge || INITIAL_HOMEPAGE_SETTINGS.aboutBadge,
+            aboutHeading: hcData.about_heading || INITIAL_HOMEPAGE_SETTINGS.aboutHeading,
+            aboutSubheading: hcData.about_subheading || INITIAL_HOMEPAGE_SETTINGS.aboutSubheading,
+            aboutMission: hcData.about_mission || INITIAL_HOMEPAGE_SETTINGS.aboutMission,
+            aboutVision: hcData.about_vision || INITIAL_HOMEPAGE_SETTINGS.aboutVision,
+            aboutImage: hcData.about_image || INITIAL_HOMEPAGE_SETTINGS.aboutImage,
+            sectionsVisibility: hcData.sections_visibility || INITIAL_HOMEPAGE_SETTINGS.sectionsVisibility
+          });
+          loadedHome = true;
+        }
+      } catch (e) {
+        // continue
       }
+
+      if (!loadedHome) {
+        const { data: homeData } = await supabase.from('homepage_settings').select('*').limit(1).maybeSingle();
+        if (homeData) {
+          setHomepageSettings({
+            heroHeading: homeData.hero_heading || INITIAL_HOMEPAGE_SETTINGS.heroHeading,
+            heroSubheading: homeData.hero_subheading || INITIAL_HOMEPAGE_SETTINGS.heroSubheading,
+            heroButtonText: homeData.hero_button_text || INITIAL_HOMEPAGE_SETTINGS.heroButtonText,
+            heroSliderImages: homeData.hero_slider_images || INITIAL_HOMEPAGE_SETTINGS.heroSliderImages,
+            aboutBadge: homeData.about_badge || INITIAL_HOMEPAGE_SETTINGS.aboutBadge,
+            aboutHeading: homeData.about_heading || INITIAL_HOMEPAGE_SETTINGS.aboutHeading,
+            aboutSubheading: homeData.about_subheading || INITIAL_HOMEPAGE_SETTINGS.aboutSubheading,
+            aboutMission: homeData.about_mission || INITIAL_HOMEPAGE_SETTINGS.aboutMission,
+            aboutVision: homeData.about_vision || INITIAL_HOMEPAGE_SETTINGS.aboutVision,
+            aboutImage: homeData.about_image || INITIAL_HOMEPAGE_SETTINGS.aboutImage,
+            sectionsVisibility: homeData.sections_visibility || INITIAL_HOMEPAGE_SETTINGS.sectionsVisibility
+          });
+        }
+      }
+
 
       // 4. Departments
       const { data: deptsData } = await supabase.from('departments').select('*').order('display_order', { ascending: true });
@@ -568,6 +658,51 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, [isSupabaseActive]);
 
+  // Real-time listener for Settings and Homepage (live updates across all open mobile & desktop devices)
+  useEffect(() => {
+    if (!isSupabaseActive) return;
+
+    const channel = supabase
+      .channel('public:settings_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'settings' },
+        (payload) => {
+          if (payload.new) {
+            setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(payload.new, prev));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hospital_settings' },
+        (payload) => {
+          if (payload.new) {
+            setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(payload.new, prev));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'homepage_content' },
+        () => {
+          fetchSupabaseData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'homepage_settings' },
+        () => {
+          fetchSupabaseData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isSupabaseActive, fetchSupabaseData]);
+
   // ============================================================================
   // DATABASE WRITES & MUTATIONS
   // ============================================================================
@@ -575,36 +710,102 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Hospital Config (General Settings)
   const updateHospitalConfig = async (newConfig: Partial<typeof INITIAL_CONFIG>) => {
     const updated = { ...hospitalConfig, ...newConfig };
-    setHospitalConfig(updated);
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('hospital_settings').upsert({
-          id: 'main',
-          name: updated.name,
-          name_urdu: updated.nameUrdu,
-          tagline: updated.tagline,
-          tagline_urdu: updated.taglineUrdu,
-          logo: updated.logo,
-          favicon: updated.favicon,
-          short_desc: updated.shortDesc,
-          short_desc_urdu: updated.shortDescUrdu,
-          social_links: updated.socialLinks,
-          contact: updated.contact,
-          updated_at: new Date().toISOString()
-        });
-        if (error) throw error;
-        showToast('General settings saved permanently to Supabase!');
-      } catch (err: any) {
-        console.error('Failed to update hospital_settings:', err);
-        showToast(`Save failed: ${err?.message || 'Check database connection'}`, 'error');
-      }
-    } else {
+    if (!isSupabaseActive) {
+      setHospitalConfig(updated);
       showToast('Settings updated (add Supabase credentials to sync across devices)');
+      return;
     }
 
-    logAction('Updated General Settings', 'Settings', 'Hospital details, contact info, or branding updated.');
+    try {
+      const rawWhatsapp = updated.contact?.whatsapp || '';
+      const whatsappCleanVal = cleanWhatsAppNumber(rawWhatsapp);
+      const rawEmergency = updated.contact?.emergencyNumber || '';
+      const emergencyVal = formatDisplayPhone(rawEmergency);
+      const emergencyRawVal = cleanPhoneEmergency(rawEmergency);
+
+      const contactObj = {
+        ...updated.contact,
+        emergencyNumber: emergencyVal,
+        emergencyNumberRaw: emergencyRawVal,
+        whatsapp: rawWhatsapp,
+        whatsappClean: whatsappCleanVal
+      };
+
+      const payload: any = {
+        id: 'main',
+        name: updated.name,
+        name_urdu: updated.nameUrdu,
+        tagline: updated.tagline,
+        tagline_urdu: updated.taglineUrdu,
+        logo: updated.logo,
+        favicon: updated.favicon,
+        short_desc: updated.shortDesc,
+        short_desc_urdu: updated.shortDescUrdu,
+        whatsapp_number: rawWhatsapp,
+        phone_emergency: emergencyVal,
+        phone_reception: updated.contact?.receptionPhone || '',
+        phone_mobile: updated.contact?.mobileEmergency || '',
+        email: updated.contact?.email || '',
+        address: updated.contact?.address || '',
+        address_urdu: updated.contact?.addressUrdu || '',
+        google_maps_url: updated.contact?.googleMapsEmbedUrl || '',
+        hours_opd: updated.contact?.hours?.opd || '',
+        hours_emergency: updated.contact?.hours?.emergency || '',
+        social_links: updated.socialLinks || {},
+        contact: contactObj,
+        updated_at: new Date().toISOString()
+      };
+
+      // 1. Save to primary 'settings' table
+      let saved = false;
+      let lastError: any = null;
+      try {
+        const { error: sError } = await supabase.from('settings').upsert(payload);
+        if (!sError) {
+          saved = true;
+        } else {
+          lastError = sError;
+        }
+      } catch (err) {
+        lastError = err;
+      }
+
+      // 2. Also keep 'hospital_settings' in sync
+      try {
+        const { error: hsError } = await supabase.from('hospital_settings').upsert({
+          id: 'main',
+          name: payload.name,
+          name_urdu: payload.name_urdu,
+          tagline: payload.tagline,
+          tagline_urdu: payload.tagline_urdu,
+          logo: payload.logo,
+          favicon: payload.favicon,
+          short_desc: payload.short_desc,
+          short_desc_urdu: payload.short_desc_urdu,
+          social_links: payload.social_links,
+          contact: payload.contact,
+          updated_at: payload.updated_at
+        });
+        if (!hsError) saved = true;
+      } catch (e) {
+        // Continue
+      }
+
+      if (!saved && lastError) {
+        throw lastError;
+      }
+
+      // Re-fetch fresh state directly from Supabase to confirm
+      await fetchSupabaseData();
+      showToast('Saved successfully to Supabase!');
+      logAction('Updated General Settings', 'Settings', 'Hospital details, contact info, or branding updated.');
+    } catch (err: any) {
+      console.error('Failed to update settings in Supabase:', err);
+      showToast(`Save failed: ${err?.message || 'Database error. Check Supabase connection and RLS.'}`, 'error');
+    }
   };
+
 
   // Operational Settings
   const updateSettings = async (newSettings: Partial<HospitalSettings>) => {
@@ -1388,21 +1589,54 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsLoading(true);
       let count = 0;
 
-      // 1. Hospital Settings
-      await supabase.from('hospital_settings').upsert({
-        id: 'main',
-        name: hospitalConfig.name,
-        name_urdu: hospitalConfig.nameUrdu,
-        tagline: hospitalConfig.tagline,
-        tagline_urdu: hospitalConfig.taglineUrdu,
-        logo: hospitalConfig.logo,
-        favicon: hospitalConfig.favicon,
-        short_desc: hospitalConfig.shortDesc,
-        short_desc_urdu: hospitalConfig.shortDescUrdu,
-        social_links: hospitalConfig.socialLinks,
-        contact: hospitalConfig.contact,
-        updated_at: new Date().toISOString()
-      });
+      // 1. Hospital Settings (upsert to settings & hospital_settings)
+      try {
+        await supabase.from('settings').upsert({
+          id: 'main',
+          name: hospitalConfig.name,
+          name_urdu: hospitalConfig.nameUrdu,
+          tagline: hospitalConfig.tagline,
+          tagline_urdu: hospitalConfig.taglineUrdu,
+          logo: hospitalConfig.logo,
+          favicon: hospitalConfig.favicon,
+          short_desc: hospitalConfig.shortDesc,
+          short_desc_urdu: hospitalConfig.shortDescUrdu,
+          whatsapp_number: hospitalConfig.contact?.whatsapp || '',
+          phone_emergency: formatDisplayPhone(hospitalConfig.contact?.emergencyNumber),
+          phone_reception: hospitalConfig.contact?.receptionPhone || '',
+          phone_mobile: hospitalConfig.contact?.mobileEmergency || '',
+          email: hospitalConfig.contact?.email || '',
+          address: hospitalConfig.contact?.address || '',
+          address_urdu: hospitalConfig.contact?.addressUrdu || '',
+          google_maps_url: hospitalConfig.contact?.googleMapsEmbedUrl || '',
+          hours_opd: hospitalConfig.contact?.hours?.opd || '',
+          hours_emergency: hospitalConfig.contact?.hours?.emergency || '',
+          social_links: hospitalConfig.socialLinks || {},
+          contact: hospitalConfig.contact || {},
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {
+        // continue
+      }
+
+      try {
+        await supabase.from('hospital_settings').upsert({
+          id: 'main',
+          name: hospitalConfig.name,
+          name_urdu: hospitalConfig.nameUrdu,
+          tagline: hospitalConfig.tagline,
+          tagline_urdu: hospitalConfig.taglineUrdu,
+          logo: hospitalConfig.logo,
+          favicon: hospitalConfig.favicon,
+          short_desc: hospitalConfig.shortDesc,
+          short_desc_urdu: hospitalConfig.shortDescUrdu,
+          social_links: hospitalConfig.socialLinks,
+          contact: hospitalConfig.contact,
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {
+        // continue
+      }
       count++;
 
       // 2. Operational Settings
@@ -1422,8 +1656,8 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       count++;
 
-      // 3. Homepage Settings
-      await supabase.from('homepage_settings').upsert({
+      // 3. Homepage Settings & Content
+      const hpPayload = {
         id: 'main',
         hero_heading: homepageSettings.heroHeading,
         hero_subheading: homepageSettings.heroSubheading,
@@ -1437,8 +1671,20 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         about_image: homepageSettings.aboutImage,
         sections_visibility: homepageSettings.sectionsVisibility,
         updated_at: new Date().toISOString()
-      });
+      };
+
+      try {
+        await supabase.from('homepage_content').upsert(hpPayload);
+      } catch (e) {
+        // continue
+      }
+      try {
+        await supabase.from('homepage_settings').upsert(hpPayload);
+      } catch (e) {
+        // continue
+      }
       count++;
+
 
       // 4. Departments
       for (const d of departments) {

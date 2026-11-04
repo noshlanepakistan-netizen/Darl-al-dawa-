@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { PhoneCall, ArrowUp } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
+
 
 // Official WhatsApp Vector Icon
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
@@ -40,14 +42,13 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({ lang }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Hospital phone number from Admin Panel settings (fallback to 042-111-327-227, 1122 purged)
-  const rawEmergency = hospitalConfig?.contact?.emergencyNumber || "042-111-327-227";
-  const emergencyPhone = rawEmergency.replace(/\b1122\b/g, '').replace(/\s*\/\s*/g, '').trim() || "042-111-327-227";
-  const emergencyPhoneRaw = hospitalConfig?.contact?.emergencyNumberRaw
-    ? hospitalConfig.contact.emergencyNumberRaw.replace(/1122/g, '')
-    : emergencyPhone.replace(/[\s-]/g, '') || "042111327227";
+  const emergencyPhone = formatDisplayPhone(hospitalConfig?.contact?.emergencyNumber);
+  const emergencyPhoneRaw = formatTelLink(hospitalConfig?.contact?.emergencyNumber);
+  const whatsappHref = formatWhatsAppLink(
+    hospitalConfig?.contact?.whatsapp,
+    "Hello Dar al Dawa Medical Center Lahore, I have an inquiry"
+  );
 
-  const whatsappNumberClean = hospitalConfig?.contact?.whatsappClean || "923001234567";
 
   return (
     <aside
@@ -85,12 +86,13 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({ lang }) => {
 
       {/* WhatsApp Chat Floating Button (Always prominent and clearly visible on mobile) */}
       <a
-        href={`https://wa.me/${whatsappNumberClean}?text=Hello%20Dar%20al%20Dawa%20Medical%20Center%20Lahore,%20I%20have%20an%20inquiry`}
+        href={whatsappHref}
         target="_blank"
         rel="noopener noreferrer"
         className="pointer-events-auto group relative flex items-center gap-1.5 min-[360px]:gap-2 px-3 py-2.5 min-[360px]:px-3.5 min-[360px]:py-2.5 sm:px-4 sm:py-3 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-2xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/30"
         title={isUrdu ? 'واٹس ایپ پر رابطہ کریں' : 'Chat on WhatsApp'}
       >
+
         <span className="relative flex h-2 w-2 shrink-0">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-85" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />

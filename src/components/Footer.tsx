@@ -13,8 +13,9 @@ import {
   Heart
 } from 'lucide-react';
 import { Logo } from './Logo';
-import { HOSPITAL_CONFIG, DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
 
 interface FooterProps {
   lang: 'en' | 'ur';
@@ -26,14 +27,13 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
   const t = UI_TRANSLATIONS[lang].footer;
   const isUrdu = lang === 'ur';
 
-  const emergencyPhone = hospitalConfig?.contact?.emergencyNumber?.replace(/\b1122\b/g, '').replace(/\s*\/\s*/g, '').trim() || HOSPITAL_CONFIG.contact.emergencyNumber;
-  const emergencyPhoneRaw = hospitalConfig?.contact?.emergencyNumberRaw
-    ? hospitalConfig.contact.emergencyNumberRaw.replace(/1122/g, '')
-    : emergencyPhone.replace(/[\s-]/g, '') || "042111327227";
-  const email = hospitalConfig?.contact?.email || HOSPITAL_CONFIG.contact.email;
+  const emergencyPhone = formatDisplayPhone(hospitalConfig?.contact?.emergencyNumber);
+  const emergencyPhoneRaw = formatTelLink(hospitalConfig?.contact?.emergencyNumber);
+  const email = hospitalConfig?.contact?.email || 'info@daraldawa.pk';
   const address = isUrdu
-    ? (hospitalConfig?.contact?.addressUrdu || HOSPITAL_CONFIG.contact.addressUrdu)
-    : (hospitalConfig?.contact?.address || HOSPITAL_CONFIG.contact.address);
+    ? (hospitalConfig?.contact?.addressUrdu || 'گلبرگ 3، لاہور، پنجاب')
+    : (hospitalConfig?.contact?.address || '42-A, Main Boulevard, Gulberg III, Lahore, Punjab');
+
 
   const handleNavClick = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
@@ -202,8 +202,8 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
                   <Clock className="w-3.5 h-3.5 text-emerald-400" />
                   <span>{isUrdu ? 'اوقاتِ کار:' : 'Service Availability:'}</span>
                 </div>
-                <p>{isUrdu ? HOSPITAL_CONFIG.contact.hours.emergencyUrdu : HOSPITAL_CONFIG.contact.hours.emergency}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">{HOSPITAL_CONFIG.contact.hours.opd}</p>
+                <p>{isUrdu ? (hospitalConfig?.contact?.hours?.emergencyUrdu || hospitalConfig?.contact?.hours?.emergency || '24/7 ایمرجنسی سروسز فعال') : (hospitalConfig?.contact?.hours?.emergency || '24/7 Hours Round-the-Clock Emergency')}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{hospitalConfig?.contact?.hours?.opd || '8:00 AM – 10:00 PM (Monday – Sunday)'}</p>
               </div>
             </div>
           </div>
@@ -218,8 +218,9 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left pt-2">
             <div>
-              © {new Date().getFullYear()} {HOSPITAL_CONFIG.name}. {t.rightsReserved}
+              © {new Date().getFullYear()} {hospitalConfig?.name || 'Dar al Dawa Medical Center'}. {t.rightsReserved}
             </div>
+
             <div className="flex items-center gap-2 text-slate-400 text-xs">
               <span>Made with care for Lahore & Punjab</span>
               <Heart className="w-3.5 h-3.5 text-red-500 fill-current" />

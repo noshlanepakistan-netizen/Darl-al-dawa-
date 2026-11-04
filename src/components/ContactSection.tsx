@@ -10,8 +10,9 @@ import {
   Building,
   Navigation
 } from 'lucide-react';
-import { HOSPITAL_CONFIG, UI_TRANSLATIONS } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
 
 interface ContactSectionProps {
   lang: 'en' | 'ur';
@@ -20,7 +21,8 @@ interface ContactSectionProps {
 export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
   const t = UI_TRANSLATIONS[lang].contact;
   const isUrdu = lang === 'ur';
-  const { addMessage } = useAdminData();
+  const { addMessage, hospitalConfig } = useAdminData();
+
 
   // Contact form state
   const [name, setName] = useState('');
@@ -92,10 +94,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
               </p>
             </div>
             <a
-              href={`tel:${HOSPITAL_CONFIG.contact.emergencyNumberRaw}`}
+              href={formatTelLink(hospitalConfig.contact.emergencyNumber)}
               className="font-mono text-base font-extrabold text-[#D62828] hover:underline"
             >
-              {HOSPITAL_CONFIG.contact.emergencyNumber}
+              {formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}
             </a>
           </div>
 
@@ -114,16 +116,16 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
             </div>
             <div>
               <a
-                href={`tel:${HOSPITAL_CONFIG.contact.receptionPhone.replace(/[\s-]/g, '')}`}
+                href={formatTelLink(hospitalConfig.contact.receptionPhone)}
                 className="font-mono text-sm font-bold text-[#1E5AA8] hover:underline block"
               >
-                {HOSPITAL_CONFIG.contact.receptionPhone}
+                {hospitalConfig.contact.receptionPhone || '042-35789000'}
               </a>
               <a
-                href={`tel:${HOSPITAL_CONFIG.contact.mobileEmergency.replace(/[\s-]/g, '')}`}
+                href={formatTelLink(hospitalConfig.contact.mobileEmergency)}
                 className="font-mono text-xs text-slate-600 hover:underline block mt-0.5"
               >
-                {HOSPITAL_CONFIG.contact.mobileEmergency}
+                {hospitalConfig.contact.mobileEmergency || '0300-1234567'}
               </a>
             </div>
           </div>
@@ -138,12 +140,12 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
                 {t.addressTitle}
               </h3>
               <p className={`text-xs text-slate-700 leading-relaxed mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
-                {isUrdu ? HOSPITAL_CONFIG.contact.addressUrdu : HOSPITAL_CONFIG.contact.address}
+                {isUrdu ? (hospitalConfig.contact.addressUrdu || hospitalConfig.contact.address) : hospitalConfig.contact.address}
               </p>
             </div>
             <div className="text-[11px] text-slate-500 font-medium pt-2 border-t border-emerald-200/60 flex items-center gap-1">
               <Navigation className="w-3 h-3 text-[#2E9E5B]" />
-              <span>{isUrdu ? HOSPITAL_CONFIG.contact.landmarkUrdu : HOSPITAL_CONFIG.contact.landmark}</span>
+              <span>{isUrdu ? (hospitalConfig.contact.landmarkUrdu || 'مین بلیوارڈ، گلبرگ 3') : (hospitalConfig.contact.landmark || 'Main Boulevard, Gulberg III')}</span>
             </div>
           </div>
 
@@ -157,17 +159,17 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
                 {isUrdu ? 'اوقاتِ کار' : 'Working Hours'}
               </h3>
               <p className="text-xs text-slate-600 mb-1">
-                <strong>{isUrdu ? 'ایمرجنسی:' : 'Emergency:'}</strong> 24/7 Always Open
+                <strong>{isUrdu ? 'ایمرجنسی:' : 'Emergency:'}</strong> {hospitalConfig.contact.hours?.emergency || '24/7 Always Open'}
               </p>
               <p className="text-xs text-slate-600">
-                <strong>{isUrdu ? 'او پی ڈی کلینک:' : 'OPD Clinics:'}</strong> 8 AM – 10 PM
+                <strong>{isUrdu ? 'او پی ڈی کلینک:' : 'OPD Clinics:'}</strong> {hospitalConfig.contact.hours?.opd || '8 AM – 10 PM'}
               </p>
             </div>
             <a
-              href={`mailto:${HOSPITAL_CONFIG.contact.email}`}
+              href={`mailto:${hospitalConfig.contact.email}`}
               className="text-xs font-semibold text-[#1E5AA8] hover:underline pt-2 border-t border-slate-200 block truncate"
             >
-              {HOSPITAL_CONFIG.contact.email}
+              {hospitalConfig.contact.email}
             </a>
           </div>
 
@@ -179,7 +181,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
           {/* Left: Google Maps Embed (Gulberg III Lahore) */}
           <div className="lg:col-span-6 rounded-3xl overflow-hidden border border-slate-200 shadow-md relative min-h-[380px] bg-slate-100">
             <iframe
-              src={HOSPITAL_CONFIG.contact.googleMapsEmbedUrl}
+              src={hospitalConfig.contact.googleMapsEmbedUrl || "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3401.3!2d74.34!3d31.52"}
               title="Hospital Location Map - Gulberg Lahore"
               className="w-full h-full min-h-[380px] border-0"
               loading="lazy"
@@ -188,8 +190,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
             {/* Map floating card */}
             <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-md p-3.5 rounded-xl border border-slate-200 shadow-md flex items-center justify-between">
               <div>
-                <div className="text-xs font-bold text-slate-900">Dar al Dawa Medical Center</div>
-                <div className="text-[11px] text-slate-500">42-A, Main Boulevard, Gulberg III, Lahore</div>
+                <div className="text-xs font-bold text-slate-900">{hospitalConfig.name}</div>
+                <div className="text-[11px] text-slate-500">{isUrdu ? (hospitalConfig.contact.addressUrdu || hospitalConfig.contact.address) : hospitalConfig.contact.address}</div>
               </div>
               <a
                 href="https://maps.google.com/?q=Gulberg+III+Lahore"

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAdminData } from '../context/AdminDataContext';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { cleanWhatsAppNumber, cleanPhoneEmergency, formatDisplayPhone } from '../../utils/phoneUtils';
+
 import {
   Settings,
   Building2,
@@ -154,7 +156,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   });
 
   // ==========================================
-  // a) GENERAL SETTINGS STATE
+  // a) GENERAL SETTINGS STATE & SYNC
   // ==========================================
   const [genHospitalName, setGenHospitalName] = useState(hospitalConfig.name);
   const [genHospitalNameUrdu, setGenHospitalNameUrdu] = useState(hospitalConfig.nameUrdu || '');
@@ -177,9 +179,33 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   const [socYoutube, setSocYoutube] = useState(hospitalConfig.socialLinks?.youtube || 'https://youtube.com/@daraldawamedical');
   const [socTiktok, setSocTiktok] = useState(hospitalConfig.socialLinks?.tiktok || 'https://tiktok.com/@daraldawamedical');
 
-  const handleSaveGeneral = (e: React.FormEvent) => {
+  // Synchronize state when hospitalConfig loads or updates from Supabase
+  useEffect(() => {
+    if (hospitalConfig) {
+      setGenHospitalName(hospitalConfig.name || '');
+      setGenHospitalNameUrdu(hospitalConfig.nameUrdu || '');
+      setGenTagline(hospitalConfig.tagline || '');
+      setGenLogo(hospitalConfig.logo || '');
+      setGenFavicon(hospitalConfig.favicon || '');
+      setGenPhoneEmergency(hospitalConfig.contact?.emergencyNumber || '');
+      setGenPhoneLandline(hospitalConfig.contact?.receptionPhone || '');
+      setGenPhoneMobile(hospitalConfig.contact?.mobileEmergency || '');
+      setGenWhatsapp(hospitalConfig.contact?.whatsapp || '');
+      setGenEmailInfo(hospitalConfig.contact?.email || '');
+      setGenAddress(hospitalConfig.contact?.address || '');
+      setGenMapEmbed(hospitalConfig.contact?.googleMapsEmbedUrl || '');
+      setGenOpdHours(hospitalConfig.contact?.hours?.opd || '');
+      setGenEmergencyHours(hospitalConfig.contact?.hours?.emergency || '');
+      setSocFacebook(hospitalConfig.socialLinks?.facebook || '');
+      setSocInstagram(hospitalConfig.socialLinks?.instagram || '');
+      setSocYoutube(hospitalConfig.socialLinks?.youtube || '');
+      setSocTiktok(hospitalConfig.socialLinks?.tiktok || '');
+    }
+  }, [hospitalConfig]);
+
+  const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateHospitalConfig({
+    await updateHospitalConfig({
       name: genHospitalName,
       nameUrdu: genHospitalNameUrdu,
       tagline: genTagline,
@@ -194,13 +220,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
       },
       contact: {
         ...hospitalConfig.contact,
-        emergencyNumber: genPhoneEmergency,
-        emergencyNumberRaw: genPhoneEmergency.replace(/[\s-]/g, ''),
+        emergencyNumber: formatDisplayPhone(genPhoneEmergency),
+        emergencyNumberRaw: cleanPhoneEmergency(genPhoneEmergency),
         receptionPhone: genPhoneLandline,
         mobileEmergency: genPhoneMobile,
-        phoneNumbers: [genPhoneEmergency, genPhoneLandline, genPhoneMobile],
+        phoneNumbers: [genPhoneEmergency, genPhoneLandline, genPhoneMobile].filter(Boolean),
         whatsapp: genWhatsapp,
-        whatsappClean: genWhatsapp.replace(/[\s+-]/g, ''),
+        whatsappClean: cleanWhatsAppNumber(genWhatsapp),
         email: genEmailInfo,
         address: genAddress,
         googleMapsEmbedUrl: genMapEmbed,
@@ -214,7 +240,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   };
 
   // ==========================================
-  // b) HOMEPAGE SETTINGS STATE
+  // b) HOMEPAGE SETTINGS STATE & SYNC
   // ==========================================
   const [hpHeading, setHpHeading] = useState(homepageSettings.heroHeading);
   const [hpSubheading, setHpSubheading] = useState(homepageSettings.heroSubheading);
@@ -228,6 +254,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   const [hpAboutImage, setHpAboutImage] = useState(homepageSettings.aboutImage);
   const [sectionsVis, setSectionsVis] = useState(homepageSettings.sectionsVisibility);
 
+  // Synchronize state when homepageSettings loads from Supabase
+  useEffect(() => {
+    if (homepageSettings) {
+      setHpHeading(homepageSettings.heroHeading || '');
+      setHpSubheading(homepageSettings.heroSubheading || '');
+      setHpButtonText(homepageSettings.heroButtonText || '');
+      setHpSliderImages(homepageSettings.heroSliderImages || []);
+      setHpAboutBadge(homepageSettings.aboutBadge || '');
+      setHpAboutHeading(homepageSettings.aboutHeading || '');
+      setHpAboutSubheading(homepageSettings.aboutSubheading || '');
+      setHpAboutMission(homepageSettings.aboutMission || '');
+      setHpAboutVision(homepageSettings.aboutVision || '');
+      setHpAboutImage(homepageSettings.aboutImage || '');
+      if (homepageSettings.sectionsVisibility) {
+        setSectionsVis(homepageSettings.sectionsVisibility);
+      }
+    }
+  }, [homepageSettings]);
+
   const handleToggleSection = (sectionKey: keyof typeof homepageSettings.sectionsVisibility) => {
     setSectionsVis((prev) => ({
       ...prev,
@@ -235,9 +280,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
     }));
   };
 
-  const handleSaveHomepage = (e: React.FormEvent) => {
+  const handleSaveHomepage = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateHomepageSettings({
+    await updateHomepageSettings({
       heroHeading: hpHeading,
       heroSubheading: hpSubheading,
       heroButtonText: hpButtonText,
@@ -251,6 +296,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
       sectionsVisibility: sectionsVis
     });
   };
+
+
 
   // ==========================================
   // c) DEPARTMENTS MANAGEMENT STATE

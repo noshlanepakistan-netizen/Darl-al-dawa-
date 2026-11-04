@@ -10,11 +10,47 @@ create extension if not exists "uuid-ossp";
 
 -- 2. CREATE TABLES
 
--- A. Hospital General Settings
+-- A1. Central Settings Table (Primary Website & Contact Settings)
+create table if not exists public.settings (
+  id text primary key default 'main',
+  name text not null default 'Dar al Dawa Medical Center',
+  name_urdu text not null default 'دارالدواء میڈیکل سنٹر',
+  tagline text not null default 'Caring for You, Every Step of the Way',
+  tagline_urdu text not null default 'ہر قدم پر آپ کی صحت اور دیکھ بھال کا امین',
+  logo text default '/assets/aistudio/image_424d9421.png',
+  favicon text default '/assets/aistudio/image_424d9421.png',
+  short_desc text,
+  short_desc_urdu text,
+  whatsapp_number text default '0300-1234567',
+  phone_emergency text default '042-111-327-227',
+  phone_reception text default '042-35789000',
+  phone_mobile text default '0300-1234567',
+  email text default 'info@daraldawa.pk',
+  address text default '42-A, Main Boulevard, Gulberg III, Lahore, Punjab, Pakistan',
+  address_urdu text default '42-اے، مین بلیوارڈ، گلبرگ 3، لاہور، پنجاب، پاکستان',
+  hours_opd text default '8:00 AM – 10:00 PM (Monday – Sunday)',
+  hours_emergency text default '24/7 Hours Round-the-Clock Emergency',
+  google_maps_url text default 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3401.3!2d74.34!3d31.52',
+  facebook_url text default 'https://facebook.com/daraldawamedical',
+  instagram_url text default 'https://instagram.com/daraldawamedical',
+  youtube_url text default 'https://youtube.com/@daraldawamedical',
+  tiktok_url text default 'https://tiktok.com/@daraldawamedical',
+  twitter_url text default 'https://twitter.com/daraldawamedical',
+  social_links jsonb default '{"facebook": "https://facebook.com/daraldawamedical", "instagram": "https://instagram.com/daraldawamedical", "youtube": "https://youtube.com/@daraldawamedical", "tiktok": "https://tiktok.com/@daraldawamedical"}'::jsonb,
+  contact jsonb default '{"emergencyNumber": "042-111-327-227", "receptionPhone": "042-35789000", "mobileEmergency": "0300-1234567", "whatsapp": "0300-1234567", "email": "info@daraldawa.pk", "address": "42-A, Main Boulevard, Gulberg III, Lahore", "hours": {"opd": "8:00 AM – 10:00 PM", "emergency": "24/7 Hours Round-the-Clock"}}'::jsonb,
+  updated_at timestamptz default now()
+);
+
+-- Seed default settings row if not present
+insert into public.settings (id, name, name_urdu, whatsapp_number, phone_emergency, phone_reception, phone_mobile, email, address)
+values ('main', 'Dar al Dawa Medical Center', 'دارالدواء میڈیکل سنٹر', '0300-1234567', '042-111-327-227', '042-35789000', '0300-1234567', 'info@daraldawa.pk', '42-A, Main Boulevard, Gulberg III, Lahore, Punjab, Pakistan')
+on conflict (id) do nothing;
+
+-- A2. Hospital Settings (Companion Table)
 create table if not exists public.hospital_settings (
   id text primary key default 'main',
   name text not null default 'Dar al Dawa Medical Center',
-  name_urdu text not null default 'دار الدواء میڈیکل سنٹر',
+  name_urdu text not null default 'دارالدواء میڈیکل سنٹر',
   tagline text not null default 'Caring for You, Every Step of the Way',
   tagline_urdu text not null default 'ہر قدم پر آپ کی صحت اور دیکھ بھال کا امین',
   logo text default '/assets/aistudio/image_424d9421.png',
@@ -25,6 +61,7 @@ create table if not exists public.hospital_settings (
   contact jsonb default '{}'::jsonb,
   updated_at timestamptz default now()
 );
+
 
 -- B. Operational System Settings
 create table if not exists public.operational_settings (
@@ -42,7 +79,7 @@ create table if not exists public.operational_settings (
   updated_at timestamptz default now()
 );
 
--- C. Homepage Settings
+-- C1. Homepage Settings
 create table if not exists public.homepage_settings (
   id text primary key default 'main',
   hero_heading text default 'Caring for You, Every Step of the Way',
@@ -58,6 +95,24 @@ create table if not exists public.homepage_settings (
   sections_visibility jsonb default '{"hero": true, "appointment": true, "departments": true, "doctors": true, "services": true, "about": true, "packages": true, "testimonials": true, "gallery": true, "blog": true, "faq": true, "contact": true}'::jsonb,
   updated_at timestamptz default now()
 );
+
+-- C2. Homepage Content (Alias Table)
+create table if not exists public.homepage_content (
+  id text primary key default 'main',
+  hero_heading text default 'Caring for You, Every Step of the Way',
+  hero_subheading text,
+  hero_button_text text default 'Book an Appointment',
+  hero_slider_images jsonb default '[]'::jsonb,
+  about_badge text default 'About Dar al Dawa',
+  about_heading text default 'A Tradition of Healing, Science & Human Compassion',
+  about_subheading text,
+  about_mission text,
+  about_vision text,
+  about_image text,
+  sections_visibility jsonb default '{"hero": true, "appointment": true, "departments": true, "doctors": true, "services": true, "about": true, "packages": true, "testimonials": true, "gallery": true, "blog": true, "faq": true, "contact": true}'::jsonb,
+  updated_at timestamptz default now()
+);
+
 
 -- D. Departments
 create table if not exists public.departments (
@@ -234,9 +289,11 @@ on conflict (id) do update set public = true;
 -- ==============================================================================
 
 -- Enable RLS on all tables
+alter table public.settings enable row level security;
 alter table public.hospital_settings enable row level security;
 alter table public.operational_settings enable row level security;
 alter table public.homepage_settings enable row level security;
+alter table public.homepage_content enable row level security;
 alter table public.departments enable row level security;
 alter table public.doctors enable row level security;
 alter table public.appointments enable row level security;
@@ -249,12 +306,16 @@ alter table public.messages enable row level security;
 alter table public.activity_logs enable row level security;
 
 -- Drop any conflicting existing policies
+drop policy if exists "Public read settings" on public.settings;
+drop policy if exists "Admin manage settings" on public.settings;
 drop policy if exists "Public read hospital_settings" on public.hospital_settings;
 drop policy if exists "Admin manage hospital_settings" on public.hospital_settings;
 drop policy if exists "Public read operational_settings" on public.operational_settings;
 drop policy if exists "Admin manage operational_settings" on public.operational_settings;
 drop policy if exists "Public read homepage_settings" on public.homepage_settings;
 drop policy if exists "Admin manage homepage_settings" on public.homepage_settings;
+drop policy if exists "Public read homepage_content" on public.homepage_content;
+drop policy if exists "Admin manage homepage_content" on public.homepage_content;
 drop policy if exists "Public read departments" on public.departments;
 drop policy if exists "Admin manage departments" on public.departments;
 drop policy if exists "Public read doctors" on public.doctors;
@@ -277,6 +338,10 @@ drop policy if exists "Admin manage activity_logs" on public.activity_logs;
 
 -- Policies: Public Read + Authenticated Admin Full Control
 
+-- Settings (Central Website & Contact Settings)
+create policy "Public read settings" on public.settings for select using (true);
+create policy "Admin manage settings" on public.settings for all to authenticated using (true) with check (true);
+
 -- Hospital Settings
 create policy "Public read hospital_settings" on public.hospital_settings for select using (true);
 create policy "Admin manage hospital_settings" on public.hospital_settings for all to authenticated using (true) with check (true);
@@ -285,9 +350,12 @@ create policy "Admin manage hospital_settings" on public.hospital_settings for a
 create policy "Public read operational_settings" on public.operational_settings for select using (true);
 create policy "Admin manage operational_settings" on public.operational_settings for all to authenticated using (true) with check (true);
 
--- Homepage Settings
+-- Homepage Settings & Content
 create policy "Public read homepage_settings" on public.homepage_settings for select using (true);
 create policy "Admin manage homepage_settings" on public.homepage_settings for all to authenticated using (true) with check (true);
+create policy "Public read homepage_content" on public.homepage_content for select using (true);
+create policy "Admin manage homepage_content" on public.homepage_content for all to authenticated using (true) with check (true);
+
 
 -- Departments
 create policy "Public read departments" on public.departments for select using (true);

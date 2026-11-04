@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { CalendarCheck, PhoneCall, ShieldCheck, Clock, Users, Award, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
-import { HOSPITAL_CONFIG, DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
+
 
 interface HeroProps {
   lang: 'en' | 'ur';
@@ -178,14 +180,15 @@ export const Hero: React.FC<HeroProps> = ({
               </button>
 
               <a
-                href={`tel:${HOSPITAL_CONFIG.contact.emergencyNumberRaw}`}
+                href={formatTelLink(hospitalConfig.contact.emergencyNumber)}
                 className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-[#D62828] hover:bg-[#b71f1f] text-white font-bold text-base shadow-md hover:shadow-lg transition-all active:scale-95"
               >
                 <PhoneCall className="w-5 h-5 animate-bounce" />
                 <span className={isUrdu ? 'font-urdu' : ''}>
-                  {isUrdu ? 'ایمرجنسی: 042-111-327-227' : t.emergencyCallBtn}
+                  {isUrdu ? `ایمرجنسی: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}` : `Emergency: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}`}
                 </span>
               </a>
+
             </div>
 
             {/* Key Quality Assurances */}
@@ -321,7 +324,7 @@ export const Hero: React.FC<HeroProps> = ({
                     {isUrdu ? 'او پی ڈی سنٹر فعال ہے' : 'OPD Desk Active Now'}
                   </span>
                   <a
-                    href={`https://wa.me/${HOSPITAL_CONFIG.contact.whatsappClean}?text=Hello,%20I%20want%20to%20inquire%20about%20OPD%20appointment`}
+                    href={formatWhatsAppLink(hospitalConfig.contact.whatsapp, 'Hello, I want to inquire about OPD appointment')}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[#2E9E5B] hover:underline font-medium"
@@ -338,7 +341,7 @@ export const Hero: React.FC<HeroProps> = ({
         {/* Trust Stats Bar */}
         <div className="mt-12 lg:mt-16 bg-white rounded-2xl shadow-md border border-slate-200/70 p-6 sm:p-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center divide-y md:divide-y-0 md:divide-x divide-slate-100">
-            {HOSPITAL_CONFIG.trustStats.map((stat, idx) => (
+            {(hospitalConfig.trustStats || []).map((stat, idx) => (
               <div key={idx} className={`pt-4 md:pt-0 ${idx > 0 && !isUrdu ? 'md:pl-6' : ''}`}>
                 <div className="text-3xl sm:text-4xl font-extrabold text-[#1E5AA8] font-heading tracking-tight">
                   {stat.value}
@@ -350,6 +353,7 @@ export const Hero: React.FC<HeroProps> = ({
             ))}
           </div>
         </div>
+
 
       </div>
     </section>

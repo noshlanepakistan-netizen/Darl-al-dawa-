@@ -12,6 +12,8 @@ import {
 import { Logo } from './Logo';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
+
 
 // Official WhatsApp Vector Icon
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
@@ -52,16 +54,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   const t = UI_TRANSLATIONS[lang].nav;
   const isUrdu = lang === 'ur';
 
-  // Hospital phone number from Admin Panel settings (fallback to 042-111-327-227, 1122 removed completely)
-  const rawEmergency = hospitalConfig?.contact?.emergencyNumber || "042-111-327-227";
-  const emergencyPhone = rawEmergency.replace(/\b1122\b/g, '').replace(/\s*\/\s*/g, '').trim() || "042-111-327-227";
-  const emergencyPhoneRaw = hospitalConfig?.contact?.emergencyNumberRaw
-    ? hospitalConfig.contact.emergencyNumberRaw.replace(/1122/g, '')
-    : emergencyPhone.replace(/[\s-]/g, '') || "042111327227";
-  const dialerHref = `tel:${emergencyPhoneRaw}`;
+  const emergencyPhone = formatDisplayPhone(hospitalConfig?.contact?.emergencyNumber);
+  const dialerHref = formatTelLink(hospitalConfig?.contact?.emergencyNumber);
+  const whatsappHref = formatWhatsAppLink(
+    hospitalConfig?.contact?.whatsapp,
+    "Hello Dar al Dawa Medical Center Lahore, I have an inquiry"
+  );
 
-  const whatsappNumberClean = hospitalConfig?.contact?.whatsappClean || "923001234567";
-  const whatsappHref = `https://wa.me/${whatsappNumberClean}?text=Hello%20Dar%20al%20Dawa%20Medical%20Center%20Lahore,%20I%20have%20an%20inquiry`;
 
   // Close "More" dropdown when clicking outside
   useEffect(() => {

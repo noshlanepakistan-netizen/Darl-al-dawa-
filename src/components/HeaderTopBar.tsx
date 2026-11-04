@@ -2,6 +2,7 @@ import React from 'react';
 import { Clock, Mail, MessageSquare, AlertCircle, MapPin } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
 
 interface HeaderTopBarProps {
   lang: 'en' | 'ur';
@@ -14,18 +15,18 @@ export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({ lang, onOpenReportsM
   const t = UI_TRANSLATIONS[lang].topBar;
   const isUrdu = lang === 'ur';
 
-  // Hospital phone number from Admin Panel settings (fallback to 042-111-327-227, 1122 purged)
-  const rawEmergency = hospitalConfig?.contact?.emergencyNumber || "042-111-327-227";
-  const emergencyPhone = rawEmergency.replace(/\b1122\b/g, '').replace(/\s*\/\s*/g, '').trim() || "042-111-327-227";
-  const emergencyPhoneRaw = hospitalConfig?.contact?.emergencyNumberRaw
-    ? hospitalConfig.contact.emergencyNumberRaw.replace(/1122/g, '')
-    : emergencyPhone.replace(/[\s-]/g, '') || "042111327227";
+  const emergencyPhone = formatDisplayPhone(hospitalConfig?.contact?.emergencyNumber);
+  const emergencyPhoneRaw = formatTelLink(hospitalConfig?.contact?.emergencyNumber);
 
   const email = hospitalConfig?.contact?.email || "info@daraldawa.pk";
   const address = isUrdu
     ? (hospitalConfig?.contact?.addressUrdu || "گلبرگ 3، لاہور، پنجاب")
     : (hospitalConfig?.contact?.address || "Gulberg III, Lahore, Punjab");
-  const whatsappNumberClean = hospitalConfig?.contact?.whatsappClean || "923001234567";
+  const whatsappHref = formatWhatsAppLink(
+    hospitalConfig?.contact?.whatsapp,
+    "Hello Dar al Dawa Medical Center Lahore, I would like to inquire about..."
+  );
+
 
   return (
     <div className="bg-[#1F2933] text-slate-200 text-xs py-2 px-4 border-b border-slate-700/60 hidden md:block select-none">
@@ -86,11 +87,12 @@ export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({ lang, onOpenReportsM
           </a>
 
           <a
-            href={`https://wa.me/${whatsappNumberClean}?text=Hello%20Dar%20al%20Dawa%20Medical%20Center%20Lahore,%20I%20would%20like%20to%20inquire%20about...`}
+            href={whatsappHref}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
           >
+
             <MessageSquare className="w-3.5 h-3.5" />
             <span className={isUrdu ? 'font-urdu' : ''}>{t.whatsapp}</span>
           </a>

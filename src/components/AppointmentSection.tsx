@@ -13,8 +13,9 @@ import {
   CalendarDays,
   FileText
 } from 'lucide-react';
-import { HOSPITAL_CONFIG, DEPARTMENTS, DOCTORS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { DEPARTMENTS, DOCTORS, UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { formatWhatsAppLink } from '../utils/phoneUtils';
 
 interface AppointmentSectionProps {
   lang: 'en' | 'ur';
@@ -35,7 +36,8 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
 }) => {
   const t = UI_TRANSLATIONS[lang].appointment;
   const isUrdu = lang === 'ur';
-  const { addAppointment, departments: liveDepts, doctors: liveDocs } = useAdminData();
+  const { addAppointment, departments: liveDepts, doctors: liveDocs, hospitalConfig } = useAdminData();
+
   const deptsList = liveDepts && liveDepts.length > 0 ? liveDepts : DEPARTMENTS;
   const docsList = liveDocs && liveDocs.length > 0 ? liveDocs : DOCTORS;
 
@@ -164,8 +166,9 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
         `*Type:* ${patientType === 'new' ? 'New Patient' : 'Follow-up'}\n` +
         (notes ? `*Notes:* ${notes}` : '');
 
-    return `https://wa.me/${HOSPITAL_CONFIG.contact.whatsappClean}?text=${encodeURIComponent(msg)}`;
+    return formatWhatsAppLink(hospitalConfig.contact.whatsapp, msg);
   };
+
 
   return (
     <section id="appointment" className="py-16 md:py-24 bg-white relative">
@@ -514,11 +517,12 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
                 </button>
 
                 <a
-                  href={`https://wa.me/${HOSPITAL_CONFIG.contact.whatsappClean}?text=Hello%20Dar%20al%20Dawa%20Hospital,%20I%20would%20like%20to%20book%20an%20OPD%20appointment`}
+                  href={formatWhatsAppLink(hospitalConfig.contact.whatsapp, 'Hello Dar al Dawa Hospital, I would like to book an OPD appointment')}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full sm:w-auto py-3.5 px-5 rounded-xl border border-emerald-600/40 bg-emerald-50 hover:bg-emerald-100 text-[#2E9E5B] font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
                 >
+
                   <MessageSquare className="w-4 h-4" />
                   <span className={isUrdu ? 'font-urdu' : ''}>{t.form.whatsappOption}</span>
                 </a>
