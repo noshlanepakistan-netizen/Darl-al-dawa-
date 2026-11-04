@@ -13,6 +13,20 @@ import { Logo } from './Logo';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 
+// Official WhatsApp Vector Icon
+const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
+  <svg
+    viewBox="0 0 24 24"
+    width="24"
+    height="24"
+    fill="currentColor"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+  </svg>
+);
+
 interface NavbarProps {
   lang: 'en' | 'ur';
   onToggleLang: () => void;
@@ -45,6 +59,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     ? hospitalConfig.contact.emergencyNumberRaw.replace(/1122/g, '')
     : emergencyPhone.replace(/[\s-]/g, '') || "042111327227";
   const dialerHref = `tel:${emergencyPhoneRaw}`;
+
+  const whatsappNumberClean = hospitalConfig?.contact?.whatsappClean || "923001234567";
+  const whatsappHref = `https://wa.me/${whatsappNumberClean}?text=Hello%20Dar%20al%20Dawa%20Medical%20Center%20Lahore,%20I%20have%20an%20inquiry`;
 
   // Close "More" dropdown when clicking outside
   useEffect(() => {
@@ -146,13 +163,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           : 'bg-white py-2 sm:py-3 border-b border-slate-100 shadow-xs'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-2.5 min-[360px]:px-3 sm:px-4 lg:px-6 flex items-center justify-between gap-1.5 sm:gap-3">
+      <div className="max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 lg:px-6 flex items-center justify-between gap-1 sm:gap-3">
         {/* Hospital Brand Logo */}
         <a href="#home" className="focus:outline-none shrink min-w-0 pr-1">
           <Logo isUrdu={isUrdu} />
         </a>
 
-        {/* Desktop Navigation Links (Compact, responsive, never overflows) */}
+        {/* Desktop Navigation Links */}
         <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 shrink-0">
           {mainNavLinks.map((link) => {
             const isActive = activeSection === link.id;
@@ -174,7 +191,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             );
           })}
 
-          {/* "More" Dropdown Menu for secondary links (packages, testimonials, faqs, contact, lab reports, staff portal) */}
+          {/* "More" Dropdown Menu */}
           <div className="relative" ref={moreDropdownRef}>
             <button
               type="button"
@@ -214,6 +231,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 <div className="my-1.5 border-t border-slate-100" />
 
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMoreDropdownOpen(false)}
+                  className="w-full text-left rtl:text-right px-4 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <WhatsAppIcon className="w-4 h-4 fill-[#25D366] shrink-0" />
+                  <span>{isUrdu ? 'واٹس ایپ پر رابطہ کریں' : 'Chat on WhatsApp'}</span>
+                </a>
+
                 {onOpenReportsModal && (
                   <button
                     type="button"
@@ -246,9 +274,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </nav>
 
-        {/* Desktop Action Buttons: Phone Call (042-111-327-227), Book Appointment CTA, Language Toggle */}
+        {/* Desktop Action Buttons: Phone Call, WhatsApp, Book Appointment, Language */}
         <div className="hidden lg:flex items-center gap-2 xl:gap-2.5 shrink-0">
-          {/* Hospital Call Button: Full number 042-111-327-227, single line, no 1122 */}
+          {/* Hospital Call Button */}
           <a
             href={dialerHref}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 xl:px-3 xl:py-2 rounded-xl bg-red-50 hover:bg-red-100/90 text-[#D62828] border border-red-200/90 font-bold text-xs transition-all whitespace-nowrap shrink-0 shadow-xs active:scale-95"
@@ -260,7 +288,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </a>
 
-          {/* Book Appointment CTA Button: Always fully visible on the right */}
+          {/* Desktop WhatsApp Quick Button */}
+          <a
+            href={whatsappHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 xl:px-3 xl:py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#25D366] border border-emerald-200 font-bold text-xs transition-all whitespace-nowrap shrink-0 shadow-xs active:scale-95"
+            title={isUrdu ? "واٹس ایپ پر رابطہ کریں" : "Chat on WhatsApp"}
+          >
+            <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366] shrink-0" />
+            <span className="text-emerald-800 font-semibold">{isUrdu ? 'واٹس ایپ' : 'WhatsApp'}</span>
+          </a>
+
+          {/* Book Appointment CTA Button */}
           <button
             onClick={() => onNavigateToAppointment()}
             type="button"
@@ -284,15 +324,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Mobile Header Controls: Always fits cleanly without overflow */}
-        <div className="flex items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 lg:hidden shrink-0">
-          {/* Quick Call Button on wider mobile screens (>=400px) */}
+        {/* Mobile Header Controls: WhatsApp, Language Toggle, and Three Lines Menu */}
+        <div className="flex items-center gap-1 min-[360px]:gap-1.5 lg:hidden shrink-0">
+          {/* Mobile Direct WhatsApp Button */}
           <a
-            href={dialerHref}
-            className="hidden min-[400px]:flex items-center justify-center p-2 rounded-xl bg-red-50 text-[#D62828] border border-red-200 hover:bg-red-100 transition-colors shrink-0 shadow-2xs"
-            title={`Call ${emergencyPhone}`}
+            href={whatsappHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center p-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 text-white transition-all shrink-0 shadow-xs border border-[#20bd5a]"
+            title={isUrdu ? "واٹس ایپ رابطہ" : "WhatsApp"}
+            aria-label="WhatsApp"
           >
-            <PhoneCall className="w-4 h-4" />
+            <WhatsAppIcon className="w-4 h-4 fill-white" />
           </a>
 
           {/* Mobile Language Toggle */}
@@ -306,7 +349,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="font-semibold">{isUrdu ? 'English' : 'اردو'}</span>
           </button>
 
-          {/* Three Lines Menu (Hamburger) Button - Prominent, High-Contrast & Always Visible */}
+          {/* Three Lines Menu (Hamburger) Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             type="button"
@@ -317,7 +360,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             {mobileMenuOpen ? (
               <X className="w-5 h-5 text-slate-900" strokeWidth={2.5} />
             ) : (
-              /* Three distinct horizontal lines */
               <div className="w-5 h-4 flex flex-col justify-between items-center py-[1px]" aria-hidden="true">
                 <span className="w-5 h-[2.5px] bg-[#1F2933] rounded-full" />
                 <span className="w-5 h-[2.5px] bg-[#1E5AA8] rounded-full" />
@@ -352,6 +394,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           <div className="pt-3 border-t border-slate-100 space-y-2">
+            {/* WhatsApp Contact in Mobile Menu */}
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm shadow-xs transition-colors"
+            >
+              <WhatsAppIcon className="w-5 h-5 fill-white" />
+              <span>{isUrdu ? 'واٹس ایپ پر فوری رابطہ کریں' : 'Chat on WhatsApp'}</span>
+            </a>
+
+            {/* Book Appointment CTA */}
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
@@ -364,6 +418,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className={isUrdu ? 'font-urdu text-base' : ''}>{t.bookBtn}</span>
             </button>
 
+            {/* 24/7 Helpline */}
             <a
               href={dialerHref}
               className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-xs transition-colors"
