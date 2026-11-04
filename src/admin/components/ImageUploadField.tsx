@@ -1,15 +1,17 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X, Image as ImageIcon, RefreshCw, Plus, Check } from 'lucide-react';
-import { compressImageFile, compressMultipleImageFiles, ACCEPT_IMAGE_ATTR } from '../utils/imageUpload';
+import { uploadImageToStorage } from '../../supabase/config';
+import { ACCEPT_IMAGE_ATTR } from '../utils/imageUpload';
 
 interface SingleImageUploadProps {
   label: string;
   value?: string;
-  onChange: (base64: string) => void;
+  onChange: (url: string) => void;
   onRemove?: () => void;
   aspectRatio?: 'square' | 'wide' | 'avatar';
   helpText?: string;
   required?: boolean;
+  folder?: string;
 }
 
 export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
@@ -19,7 +21,8 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
   onRemove,
   aspectRatio = 'square',
   helpText,
-  required = false
+  required = false,
+  folder = 'hospital'
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -32,14 +35,10 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
     setError(null);
     setLoading(true);
     try {
-      const dataUrl = await compressImageFile(file, {
-        maxWidth: aspectRatio === 'wide' ? 1200 : 800,
-        maxHeight: aspectRatio === 'wide' ? 800 : 800,
-        quality: 0.82
-      });
-      onChange(dataUrl);
+      const publicUrl = await uploadImageToStorage(file, folder);
+      onChange(publicUrl);
     } catch (err: any) {
-      setError(err?.message || 'Failed to process image');
+      setError(err?.message || 'Failed to process and upload image');
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -105,7 +104,7 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Change Image</span>
+              <span>{loading ? 'Uploading...' : 'Change Image'}</span>
             </button>
 
             <button
@@ -115,7 +114,7 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
             >
               Remove
             </button>
-            <div className="text-[10px] text-slate-400">JPG, PNG, WEBP auto-compressed</div>
+            <div className="text-[10px] text-slate-400">Uploads to Supabase Storage (auto-compressed)</div>
           </div>
         </div>
       ) : (
@@ -126,21 +125,25 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
           }`}
         >
           {loading ? (
-            <RefreshCw className="w-6 h-6 text-[#1E5AA8] animate-spin" />
-          ) : (
-            <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 shadow-2xs text-slate-500 group-hover:text-[#1E5AA8] group-hover:border-blue-200 flex items-center justify-center transition-colors">
-              <Upload className="w-4 h-4" />
+            <div className="flex flex-col items-center gap-1">
+              <RefreshCw className="w-6 h-6 text-[#1E5AA8] animate-spin" />
+              <span className="text-[11px] text-slate-500 font-medium">Compressing & Uploading to Supabase...</span>
             </div>
+          ) : (
+            <>
+              <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 shadow-2xs text-slate-500 group-hover:text-[#1E5AA8] group-hover:border-blue-200 flex items-center justify-center transition-colors">
+                <Upload className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold text-[#1E5AA8] group-hover:underline">
+                  Choose from Gallery / Files
+                </span>
+                <span className="text-[11px] text-slate-400 block mt-0.5">
+                  JPG, PNG, WEBP (auto-compressed & stored in Supabase)
+                </span>
+              </div>
+            </>
           )}
-
-          <div>
-            <span className="text-xs font-semibold text-[#1E5AA8] group-hover:underline">
-              Choose from Gallery / Files
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">
-              JPG, PNG, WEBP (auto-optimized)
-            </span>
-          </div>
         </div>
       )}
 
@@ -152,9 +155,10 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
 interface MultipleImageUploadProps {
   label: string;
   values: string[];
-  onChange: (base64Array: string[]) => void;
+  onChange: (urls: string[]) => void;
   maxCount?: number;
   helpText?: string;
+  folder?: string;
 }
 
 export const MultipleImageUploadField: React.FC<MultipleImageUploadProps> = ({
@@ -162,7 +166,8 @@ export const MultipleImageUploadField: React.FC<MultipleImageUploadProps> = ({
   values = [],
   onChange,
   maxCount = 12,
-  helpText
+  helpText,
+  folder = 'gallery'
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -175,15 +180,14 @@ export const MultipleImageUploadField: React.FC<MultipleImageUploadProps> = ({
     setError(null);
     setLoading(true);
     try {
-      const dataUrls = await compressMultipleImageFiles(files, {
-        maxWidth: 1200,
-        maxHeight: 1000,
-        quality: 0.8
-      });
-      const combined = [...values, ...dataUrls].slice(0, maxCount);
+      const uploadPromises = Array.from(files).map((file) =>
+        uploadImageToStorage(file, folder)
+      );
+      const publicUrls = await Promise.all(uploadPromises);
+      const combined = [...values, ...publicUrls].slice(0, maxCount);
       onChange(combined);
     } catch (err: any) {
-      setError(err?.message || 'Failed to process images');
+      setError(err?.message || 'Failed to upload images');
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

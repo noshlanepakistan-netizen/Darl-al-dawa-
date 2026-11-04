@@ -16,6 +16,7 @@ import {
   PhoneCall
 } from 'lucide-react';
 import { SERVICES_FACILITIES, UI_TRANSLATIONS } from '../data/hospitalData';
+import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface ServicesFacilitiesProps {
   lang: 'en' | 'ur';
@@ -37,6 +38,8 @@ export const ServicesFacilities: React.FC<ServicesFacilitiesProps> = ({
   lang,
   onBookHomeSampling
 }) => {
+  const { services } = useAdminData();
+  const allServices = services && services.length > 0 ? services : SERVICES_FACILITIES;
   const t = UI_TRANSLATIONS[lang].services;
   const isUrdu = lang === 'ur';
 
@@ -49,7 +52,7 @@ export const ServicesFacilities: React.FC<ServicesFacilitiesProps> = ({
     { id: 'inpatient', label: isUrdu ? 'آپریشن تھیٹرز و فارمیسی' : 'Theatres & Pharmacy' }
   ];
 
-  const filteredServices = SERVICES_FACILITIES.filter((service) => {
+  const filteredServices = allServices.filter((service) => {
     if (activeCategory === 'all') return true;
     if (activeCategory === 'emergency') return service.id === 'icu';
     if (activeCategory === 'diagnostics') return service.id === 'lab' || service.id === 'imaging' || service.id === 'homesampling' || service.id === 'online-reports';

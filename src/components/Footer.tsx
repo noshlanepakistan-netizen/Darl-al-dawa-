@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { HOSPITAL_CONFIG, DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface FooterProps {
   lang: 'en' | 'ur';
@@ -21,8 +22,18 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
+  const { hospitalConfig } = useAdminData();
   const t = UI_TRANSLATIONS[lang].footer;
   const isUrdu = lang === 'ur';
+
+  const emergencyPhone = hospitalConfig?.contact?.emergencyNumber?.replace(/\b1122\b/g, '').replace(/\s*\/\s*/g, '').trim() || HOSPITAL_CONFIG.contact.emergencyNumber;
+  const emergencyPhoneRaw = hospitalConfig?.contact?.emergencyNumberRaw
+    ? hospitalConfig.contact.emergencyNumberRaw.replace(/1122/g, '')
+    : emergencyPhone.replace(/[\s-]/g, '') || "042111327227";
+  const email = hospitalConfig?.contact?.email || HOSPITAL_CONFIG.contact.email;
+  const address = isUrdu
+    ? (hospitalConfig?.contact?.addressUrdu || HOSPITAL_CONFIG.contact.addressUrdu)
+    : (hospitalConfig?.contact?.address || HOSPITAL_CONFIG.contact.address);
 
   const handleNavClick = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
@@ -165,22 +176,24 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
               <div className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-[#2E9E5B] mt-1 flex-shrink-0" />
                 <span className={isUrdu ? 'font-urdu' : ''}>
-                  {isUrdu ? HOSPITAL_CONFIG.contact.addressUrdu : HOSPITAL_CONFIG.contact.address}
+                  {address}
                 </span>
               </div>
 
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-[#D62828] flex-shrink-0" />
                 <div>
-                  <span className="text-white font-mono font-bold block">{HOSPITAL_CONFIG.contact.emergencyNumber}</span>
-                  <span className="text-[11px] text-slate-400">{isUrdu ? '24/7 ایمرجنسی ہاٹ لائن' : '24/7 Emergency & Trauma'}</span>
+                  <a href={`tel:${emergencyPhoneRaw}`} className="text-white font-mono font-bold block hover:underline">
+                    {emergencyPhone}
+                  </a>
+                  <span className="text-[11px] text-slate-400">{isUrdu ? '24/7 ہسپتال ہیلپ لائن' : '24/7 Emergency & Helpline'}</span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-[#1E5AA8] flex-shrink-0" />
-                <a href={`mailto:${HOSPITAL_CONFIG.contact.email}`} className="text-slate-300 hover:text-white font-mono text-xs">
-                  {HOSPITAL_CONFIG.contact.email}
+                <a href={`mailto:${email}`} className="text-slate-300 hover:text-white font-mono text-xs">
+                  {email}
                 </a>
               </div>
 

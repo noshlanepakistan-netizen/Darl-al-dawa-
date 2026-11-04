@@ -31,7 +31,11 @@ import {
   Mail,
   MapPin,
   Clock,
-  Share2
+  Share2,
+  Database,
+  UploadCloud,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import { ImageUploadField, MultipleImageUploadField } from '../components/ImageUploadField';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
@@ -86,13 +90,54 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
     addFaq,
     updateFaq,
     deleteFaq,
-    showToast
+    showToast,
+    isSupabaseActive,
+    isLoading,
+    refetchData,
+    importLocalDataToSupabase
   } = useAdminData();
 
   const { currentUser, updateProfile, changePassword, logout } = useAdminAuth();
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+
+  // Supabase Import & Sync state
+  const [isImporting, setIsImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleImportLocalData = async () => {
+    setIsImporting(true);
+    setImportNotice(null);
+    try {
+      const res = await importLocalDataToSupabase();
+      if (res.success) {
+        setImportNotice(`Migration completed! ${res.count} records imported to Supabase Cloud.`);
+        showToast(`Data migration successful! ${res.count} records loaded.`);
+      } else {
+        setImportNotice(`Import notice: ${res.error || 'Failed to complete migration'}`);
+        showToast(res.error || 'Migration failed. Check Supabase connection.', 'error');
+      }
+    } catch (err: any) {
+      setImportNotice(`Error during migration: ${err.message || 'Unknown error'}`);
+      showToast(err.message || 'Data import failed', 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleRefreshCloud = async () => {
+    setIsRefreshing(true);
+    try {
+      await refetchData();
+      showToast('Data refreshed with latest cloud state!');
+    } catch (err: any) {
+      showToast('Could not refresh cloud data', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Confirmation modal state
   const [deleteModal, setDeleteModal] = useState<{
@@ -675,7 +720,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
     showToast('Admin profile details updated successfully!');
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!oldPassword) {
       showToast('Please enter your current password', 'error');
@@ -685,7 +730,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
       showToast('New passwords do not match', 'error');
       return;
     }
-    const res = changePassword(oldPassword, newPassword);
+    const res = await changePassword(oldPassword, newPassword);
     if (res.success) {
       showToast(res.message);
       setOldPassword('');
@@ -710,6 +755,84 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
               : 'Complete control of branding, homepage, faculty, appointments, content, and security.'}
           </p>
         </div>
+      </div>
+
+      {/* Supabase Cloud Connection & Sync Status Banner */}
+      <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+        isSupabaseActive 
+          ? 'bg-gradient-to-r from-teal-900 to-emerald-950 text-white border-teal-700 shadow-md'
+          : 'bg-amber-50 border-amber-200 text-slate-800'
+      }`}>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              isSupabaseActive ? 'bg-white/10 text-emerald-300' : 'bg-amber-200/80 text-amber-800'
+            }`}>
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className={`text-sm font-bold ${isSupabaseActive ? 'text-white' : 'text-slate-900'}`}>
+                  {isSupabaseActive ? 'Supabase Cloud Database & Storage Active' : 'Supabase Cloud Database Setup Required'}
+                </h3>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                  isSupabaseActive 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
+                  {isSupabaseActive ? 'Live Multi-Device Sync' : 'Local Fallback Mode'}
+                </span>
+              </div>
+              <p className={`text-xs mt-1 leading-relaxed ${isSupabaseActive ? 'text-teal-100/90' : 'text-slate-600'}`}>
+                {isSupabaseActive
+                  ? 'All changes to hospital settings, doctors, departments, gallery images, and patient appointments sync in real-time across Netlify, phones, and computers.'
+                  : 'Currently running on browser fallback. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Netlify Environment Variables to enable live multi-device syncing.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-center">
+            {/* One-time Import Local Data to Database Button */}
+            <button
+              type="button"
+              onClick={handleImportLocalData}
+              disabled={isImporting}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
+                isSupabaseActive
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold active:scale-95 disabled:opacity-50'
+                  : 'bg-teal-700 hover:bg-teal-800 text-white active:scale-95 disabled:opacity-50'
+              }`}
+              title="Reads existing hospital data from this browser's localStorage and uploads it directly to Supabase"
+            >
+              <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-bounce' : ''}`} />
+              <span>{isImporting ? 'Importing Local Data...' : 'Import Local Data to Database'}</span>
+            </button>
+
+            {/* Refresh Cloud Data */}
+            <button
+              type="button"
+              onClick={handleRefreshCloud}
+              disabled={isRefreshing}
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                isSupabaseActive
+                  ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Syncing...' : 'Sync Now'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Import status notification banner */}
+        {importNotice && (
+          <div className="mt-3 pt-3 border-t border-white/10 text-xs font-medium text-emerald-200 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{importNotice}</span>
+          </div>
+        )}
       </div>
 
       {/* Main Tabs Navigation */}

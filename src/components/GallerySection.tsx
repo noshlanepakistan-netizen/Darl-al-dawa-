@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { Camera, X, ChevronLeft, ChevronRight, Maximize2, ChevronDown, ChevronUp } from 'lucide-react';
 import { GALLERY_ITEMS, UI_TRANSLATIONS, GalleryItem } from '../data/hospitalData';
+import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface GallerySectionProps {
   lang: 'en' | 'ur';
 }
 
 export const GallerySection: React.FC<GallerySectionProps> = ({ lang }) => {
+  const { gallery } = useAdminData();
+  const allGalleryItems = gallery && gallery.length > 0 ? gallery : GALLERY_ITEMS;
   const t = UI_TRANSLATIONS[lang].gallery;
   const isUrdu = lang === 'ur';
 
@@ -23,8 +26,8 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ lang }) => {
   ];
 
   const filteredItems = activeTab === 'all'
-    ? GALLERY_ITEMS
-    : GALLERY_ITEMS.filter((item) => item.category === activeTab);
+    ? allGalleryItems
+    : allGalleryItems.filter((item) => item.category === activeTab);
 
   const displayedItems = showAllPhotos ? filteredItems : filteredItems.slice(0, 4);
 

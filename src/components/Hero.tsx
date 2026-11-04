@@ -16,7 +16,8 @@ export const Hero: React.FC<HeroProps> = ({
 }) => {
   const t = UI_TRANSLATIONS[lang].hero;
   const isUrdu = lang === 'ur';
-  const { homepageSettings, hospitalConfig } = useAdminData();
+  const { homepageSettings, hospitalConfig, departments: liveDepts } = useAdminData();
+  const deptsList = liveDepts && liveDepts.length > 0 ? liveDepts : DEPARTMENTS;
 
   const heroHeading = homepageSettings?.heroHeading || (isUrdu ? 'دار الدواء میڈیکل سنٹر' : 'Caring for You, Every Step of the Way');
   const heroSubtitle = homepageSettings?.heroSubheading || t.subtitle;
@@ -281,7 +282,7 @@ export const Hero: React.FC<HeroProps> = ({
                           onChange={(e) => setQuickDept(e.target.value)}
                           className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm bg-slate-50/50"
                         >
-                          {DEPARTMENTS.map((dept) => (
+                          {deptsList.map((dept) => (
                             <option key={dept.id} value={dept.id}>
                               {isUrdu ? dept.titleUrdu : dept.title}
                             </option>

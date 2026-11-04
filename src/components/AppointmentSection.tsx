@@ -35,13 +35,15 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
 }) => {
   const t = UI_TRANSLATIONS[lang].appointment;
   const isUrdu = lang === 'ur';
-  const { addAppointment } = useAdminData();
+  const { addAppointment, departments: liveDepts, doctors: liveDocs } = useAdminData();
+  const deptsList = liveDepts && liveDepts.length > 0 ? liveDepts : DEPARTMENTS;
+  const docsList = liveDocs && liveDocs.length > 0 ? liveDocs : DOCTORS;
 
   // Form states
   const [patientName, setPatientName] = useState(prefillName);
   const [phone, setPhone] = useState(prefillPhone);
   const [cnic, setCnic] = useState('');
-  const [departmentId, setDepartmentId] = useState(preselectedDeptId || DEPARTMENTS[0].id);
+  const [departmentId, setDepartmentId] = useState(preselectedDeptId || (deptsList[0]?.id || 'cardiology'));
   const [doctorId, setDoctorId] = useState(preselectedDoctorId || '');
   const [appointmentDate, setAppointmentDate] = useState(() => {
     if (prefillDate) return prefillDate;
@@ -68,7 +70,7 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   }, [preselectedDeptId, preselectedDoctorId, prefillName, prefillPhone, prefillDate]);
 
   // Doctors matching current department
-  const availableDoctors = DOCTORS.filter((d) => d.departmentId === departmentId);
+  const availableDoctors = docsList.filter((d) => d.departmentId === departmentId && d.active !== false);
 
   // Validate Pakistani phone
   const validatePakistaniPhone = (value: string): boolean => {
@@ -129,8 +131,8 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   };
 
   // Generate WhatsApp prefilled message URL
-  const selectedDeptObj = DEPARTMENTS.find((d) => d.id === departmentId);
-  const selectedDocObj = DOCTORS.find((d) => d.id === doctorId);
+  const selectedDeptObj = deptsList.find((d) => d.id === departmentId);
+  const selectedDocObj = docsList.find((d) => d.id === doctorId);
 
   const generateWhatsAppUrl = () => {
     const deptTitle = isUrdu ? selectedDeptObj?.titleUrdu : selectedDeptObj?.title;
@@ -399,7 +401,7 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
                       }}
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm outline-none focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100"
                     >
-                      {DEPARTMENTS.map((dept) => (
+                      {deptsList.map((dept) => (
                         <option key={dept.id} value={dept.id}>
                           {isUrdu ? dept.titleUrdu : dept.title}
                         </option>

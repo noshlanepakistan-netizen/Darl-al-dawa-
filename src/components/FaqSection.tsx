@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { HelpCircle, ChevronDown, ShieldCheck, Building2 } from 'lucide-react';
 import { FAQS, HOSPITAL_CONFIG, UI_TRANSLATIONS } from '../data/hospitalData';
+import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface FaqSectionProps {
   lang: 'en' | 'ur';
 }
 
 export const FaqSection: React.FC<FaqSectionProps> = ({ lang }) => {
+  const { faqs } = useAdminData();
+  const allFaqs = faqs && faqs.length > 0 ? faqs : FAQS;
   const t = UI_TRANSLATIONS[lang].faq;
   const isUrdu = lang === 'ur';
 
-  const [openFaqId, setOpenFaqId] = useState<string>(FAQS[0]?.id || '');
+  const [openFaqId, setOpenFaqId] = useState<string>(allFaqs[0]?.id || '');
   const [activeFaqCategory, setActiveFaqCategory] = useState<string>('all');
 
   const categories = [
@@ -20,11 +23,11 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ lang }) => {
     { id: 'emergency', label: isUrdu ? 'ایمرجنسی و لیب' : 'Emergency & Labs' }
   ];
 
-  const filteredFaqs = FAQS.filter((faq) => {
+  const filteredFaqs = allFaqs.filter((faq) => {
     if (activeFaqCategory === 'all') return true;
-    if (activeFaqCategory === 'general') return faq.id === 'faq-appt' || faq.id === 'faq-hours';
-    if (activeFaqCategory === 'insurance') return faq.id === 'faq-sehat' || faq.id === 'faq-insurance';
-    if (activeFaqCategory === 'emergency') return faq.id === 'faq-emergency' || faq.id === 'faq-lab';
+    if (activeFaqCategory === 'general') return faq.category === 'general' || faq.id === 'faq-appt' || faq.id === 'faq-hours';
+    if (activeFaqCategory === 'insurance') return faq.category === 'billing' || faq.id === 'faq-sehat' || faq.id === 'faq-insurance';
+    if (activeFaqCategory === 'emergency') return faq.category === 'emergency' || faq.id === 'faq-emergency' || faq.id === 'faq-lab';
     return true;
   });
 

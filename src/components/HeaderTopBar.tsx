@@ -1,6 +1,7 @@
 import React from 'react';
-import { Phone, Clock, Mail, MessageSquare, AlertCircle, MapPin } from 'lucide-react';
-import { HOSPITAL_CONFIG, UI_TRANSLATIONS } from '../data/hospitalData';
+import { Clock, Mail, MessageSquare, AlertCircle, MapPin } from 'lucide-react';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
+import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface HeaderTopBarProps {
   lang: 'en' | 'ur';
@@ -9,18 +10,32 @@ interface HeaderTopBarProps {
 }
 
 export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({ lang, onOpenReportsModal, onGoToAdmin }) => {
+  const { hospitalConfig } = useAdminData();
   const t = UI_TRANSLATIONS[lang].topBar;
   const isUrdu = lang === 'ur';
 
+  // Hospital phone number from Admin Panel settings (fallback to 042-111-327-227, 1122 purged)
+  const rawEmergency = hospitalConfig?.contact?.emergencyNumber || "042-111-327-227";
+  const emergencyPhone = rawEmergency.replace(/\b1122\b/g, '').replace(/\s*\/\s*/g, '').trim() || "042-111-327-227";
+  const emergencyPhoneRaw = hospitalConfig?.contact?.emergencyNumberRaw
+    ? hospitalConfig.contact.emergencyNumberRaw.replace(/1122/g, '')
+    : emergencyPhone.replace(/[\s-]/g, '') || "042111327227";
+
+  const email = hospitalConfig?.contact?.email || "info@daraldawa.pk";
+  const address = isUrdu
+    ? (hospitalConfig?.contact?.addressUrdu || "گلبرگ 3، لاہور، پنجاب")
+    : (hospitalConfig?.contact?.address || "Gulberg III, Lahore, Punjab");
+  const whatsappNumberClean = hospitalConfig?.contact?.whatsappClean || "923001234567";
+
   return (
-    <div className="bg-[#1F2933] text-slate-200 text-xs py-2 px-4 border-b border-slate-700/60 hidden md:block">
+    <div className="bg-[#1F2933] text-slate-200 text-xs py-2 px-4 border-b border-slate-700/60 hidden md:block select-none">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-y-2">
-        {/* Left: Emergency Hotline & Location */}
+        {/* Left: Emergency Helpline & Location */}
         <div className="flex items-center gap-4 flex-wrap">
           <a
-            href={`tel:${HOSPITAL_CONFIG.contact.emergencyNumberRaw}`}
+            href={`tel:${emergencyPhoneRaw}`}
             className="flex items-center gap-1.5 font-semibold text-rose-400 hover:text-rose-300 transition-colors bg-rose-950/60 px-2.5 py-0.5 rounded-full border border-rose-800/50"
-            title="Call 24/7 Emergency"
+            title={isUrdu ? `24/7 ایمرجنسی ہاٹ لائن کال کریں: ${emergencyPhone}` : `Call 24/7 Helpline: ${emergencyPhone}`}
           >
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -28,13 +43,13 @@ export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({ lang, onOpenReportsM
             </span>
             <AlertCircle className="w-3.5 h-3.5" />
             <span>{t.emergency247}</span>
-            <span className="text-white font-mono font-bold tracking-wider">{HOSPITAL_CONFIG.contact.emergencyNumber}</span>
+            <span className="text-white font-mono font-bold tracking-wider">{emergencyPhone}</span>
           </a>
 
           <div className="flex items-center gap-1.5 text-slate-300">
             <MapPin className="w-3.5 h-3.5 text-[#2E9E5B]" />
             <span className={isUrdu ? 'font-urdu' : ''}>
-              {isUrdu ? 'گلبرگ 3، لاہور، پنجاب' : 'Gulberg III, Lahore, Punjab'}
+              {address}
             </span>
           </div>
         </div>
@@ -63,15 +78,15 @@ export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({ lang, onOpenReportsM
           )}
 
           <a
-            href={`mailto:${HOSPITAL_CONFIG.contact.email}`}
+            href={`mailto:${email}`}
             className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors"
           >
             <Mail className="w-3.5 h-3.5 text-slate-400" />
-            <span>{HOSPITAL_CONFIG.contact.email}</span>
+            <span>{email}</span>
           </a>
 
           <a
-            href={`https://wa.me/${HOSPITAL_CONFIG.contact.whatsappClean}?text=Hello%20Dar%20al%20Dawa%20Medical%20Center%20Lahore,%20I%20would%20like%20to%20inquire%20about...`}
+            href={`https://wa.me/${whatsappNumberClean}?text=Hello%20Dar%20al%20Dawa%20Medical%20Center%20Lahore,%20I%20would%20like%20to%20inquire%20about...`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-medium transition-colors"

@@ -1,34 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { Star, ChevronLeft, ChevronRight, Quote, CheckCircle, MessageSquareQuote } from 'lucide-react';
 import { TESTIMONIALS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface TestimonialsProps {
   lang: 'en' | 'ur';
 }
 
 export const Testimonials: React.FC<TestimonialsProps> = ({ lang }) => {
+  const { testimonials } = useAdminData();
+  const allTestimonials = testimonials && testimonials.length > 0 ? testimonials : TESTIMONIALS;
   const t = UI_TRANSLATIONS[lang].testimonials;
   const isUrdu = lang === 'ur';
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const prev = () => {
-    setCurrentIndex((prevIdx) => (prevIdx === 0 ? TESTIMONIALS.length - 1 : prevIdx - 1));
+    setCurrentIndex((prevIdx) => (prevIdx === 0 ? allTestimonials.length - 1 : prevIdx - 1));
   };
 
   const next = () => {
-    setCurrentIndex((prevIdx) => (prevIdx === TESTIMONIALS.length - 1 ? 0 : prevIdx + 1));
+    setCurrentIndex((prevIdx) => (prevIdx === allTestimonials.length - 1 ? 0 : prevIdx + 1));
   };
 
   // Auto advance every 7 seconds
   useEffect(() => {
+    if (allTestimonials.length <= 1) return;
     const timer = setInterval(() => {
       next();
     }, 7000);
     return () => clearInterval(timer);
-  }, []);
+  }, [allTestimonials.length]);
 
-  const activeTestimonial = TESTIMONIALS[currentIndex];
+  const activeTestimonial = allTestimonials[currentIndex] || allTestimonials[0];
 
   return (
     <section id="testimonials" className="py-12 md:py-16 bg-white relative overflow-hidden">

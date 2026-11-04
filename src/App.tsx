@@ -69,6 +69,34 @@ export default function App() {
   const [prefillPhone, setPrefillPhone] = useState<string>('');
   const [prefillDate, setPrefillDate] = useState<string>('');
 
+  // Handle URL hash / path / search changes for admin route protection
+  useEffect(() => {
+    const checkAdminRoute = () => {
+      const hash = window.location.hash.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+      if (
+        hash.includes('admin') ||
+        hash.includes('staff') ||
+        search.includes('admin') ||
+        search.includes('staff') ||
+        path.includes('/admin') ||
+        path.includes('/staff')
+      ) {
+        setViewMode('admin');
+      }
+    };
+
+    checkAdminRoute();
+    window.addEventListener('hashchange', checkAdminRoute);
+    window.addEventListener('popstate', checkAdminRoute);
+
+    return () => {
+      window.removeEventListener('hashchange', checkAdminRoute);
+      window.removeEventListener('popstate', checkAdminRoute);
+    };
+  }, []);
+
   // Handle RTL vs LTR attribute on <html> element
   useEffect(() => {
     document.documentElement.dir = lang === 'ur' ? 'rtl' : 'ltr';
@@ -79,9 +107,25 @@ export default function App() {
     setLang((prev) => (prev === 'en' ? 'ur' : 'en'));
   };
 
+  const handleOpenAdmin = () => {
+    setViewMode('admin');
+    window.location.hash = 'admin';
+  };
+
+  const handleGoHome = () => {
+    setViewMode('website');
+    if (window.location.hash.includes('admin') || window.location.hash.includes('staff')) {
+      try {
+        window.history.pushState(null, '', window.location.pathname);
+      } catch {
+        window.location.hash = '';
+      }
+    }
+  };
+
   const scrollToAppointment = () => {
     if (viewMode !== 'website') {
-      setViewMode('website');
+      handleGoHome();
       setTimeout(() => {
         const el = document.getElementById('appointment');
         if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -128,7 +172,7 @@ export default function App() {
 
   const handleNavigateSection = (sectionId: string) => {
     if (viewMode !== 'website') {
-      setViewMode('website');
+      handleGoHome();
       setTimeout(() => {
         const el = document.getElementById(sectionId);
         if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -173,7 +217,7 @@ export default function App() {
     }
   };
 
-  // If in admin mode, show Login or Admin Layout
+  // If in admin mode, strictly check authentication
   if (viewMode === 'admin') {
     return (
       <div className={`min-h-screen bg-[#F7FAFC] text-[#1F2933] ${lang === 'ur' ? 'font-urdu' : 'font-body'}`}>
@@ -181,14 +225,14 @@ export default function App() {
         {!isAuthenticated ? (
           <LoginPage
             onSuccess={() => setViewMode('admin')}
-            onGoHome={() => setViewMode('website')}
+            onGoHome={handleGoHome}
             lang={lang}
           />
         ) : (
           <AdminLayout
             currentModule={adminModule}
             onSelectModule={setAdminModule}
-            onGoHome={() => setViewMode('website')}
+            onGoHome={handleGoHome}
             lang={lang}
             onToggleLang={toggleLang}
           >
@@ -199,7 +243,7 @@ export default function App() {
     );
   }
 
-  // Public Hospital Website with exact new section order:
+  // Public Hospital Website with exact section order:
   // 1) Header / Navbar
   // 2) Hero section
   // 3) Appointment Booking Form
@@ -223,14 +267,14 @@ export default function App() {
       <HeaderTopBar
         lang={lang}
         onOpenReportsModal={() => setIsReportModalOpen(true)}
-        onGoToAdmin={() => setViewMode('admin')}
+        onGoToAdmin={handleOpenAdmin}
       />
       <Navbar
         lang={lang}
         onToggleLang={toggleLang}
         onNavigateToAppointment={scrollToAppointment}
         onOpenReportsModal={() => setIsReportModalOpen(true)}
-        onGoToAdmin={() => setViewMode('admin')}
+        onGoToAdmin={handleOpenAdmin}
       />
 
       <main>

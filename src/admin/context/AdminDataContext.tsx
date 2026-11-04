@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   AdminAppointment,
   PatientRecord,
@@ -38,8 +38,7 @@ import {
   INITIAL_ACTIVITY_LOGS,
   INITIAL_HOSPITAL_SETTINGS
 } from '../data/sampleAdminData';
-import { db } from '../../firebase/config';
-import { doc, setDoc } from 'firebase/firestore';
+import { supabase, isSupabaseConfigured } from '../../supabase/config';
 
 interface Toast {
   id: string;
@@ -79,64 +78,70 @@ export const INITIAL_HOMEPAGE_SETTINGS: HomepageSettings = {
 };
 
 interface AdminDataContextType {
-  // Hospital Config
+  // Cloud & Loading State
+  isLoading: boolean;
+  isSupabaseActive: boolean;
+  refetchData: () => Promise<void>;
+  importLocalDataToSupabase: () => Promise<{ success: boolean; count: number; error?: string }>;
+
+  // Hospital Config (General Settings)
   hospitalConfig: typeof INITIAL_CONFIG;
-  updateHospitalConfig: (newConfig: Partial<typeof INITIAL_CONFIG>) => void;
+  updateHospitalConfig: (newConfig: Partial<typeof INITIAL_CONFIG>) => Promise<void>;
 
   // Operational Settings
   settings: HospitalSettings;
-  updateSettings: (newSettings: Partial<HospitalSettings>) => void;
+  updateSettings: (newSettings: Partial<HospitalSettings>) => Promise<void>;
 
   // Homepage Settings
   homepageSettings: HomepageSettings;
-  updateHomepageSettings: (newSettings: Partial<HomepageSettings>) => void;
+  updateHomepageSettings: (newSettings: Partial<HomepageSettings>) => Promise<void>;
 
   // Appointments
   appointments: AdminAppointment[];
   addAppointment: (app: Omit<AdminAppointment, 'id' | 'createdAt'>) => string;
-  updateAppointmentStatus: (id: string, status: AppointmentStatus) => void;
-  deleteAppointment: (id: string) => void;
+  updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
+  deleteAppointment: (id: string) => Promise<void>;
 
   // Doctors
   doctors: Doctor[];
-  addDoctor: (doc: Omit<Doctor, 'id'>) => void;
-  updateDoctor: (id: string, doc: Partial<Doctor>) => void;
-  deleteDoctor: (id: string) => void;
-  toggleDoctorActive: (id: string) => void;
+  addDoctor: (doc: Omit<Doctor, 'id'>) => Promise<void>;
+  updateDoctor: (id: string, doc: Partial<Doctor>) => Promise<void>;
+  deleteDoctor: (id: string) => Promise<void>;
+  toggleDoctorActive: (id: string) => Promise<void>;
 
   // Departments
   departments: Department[];
-  addDepartment: (dept: Omit<Department, 'id'>) => void;
-  updateDepartment: (id: string, dept: Partial<Department>) => void;
-  deleteDepartment: (id: string) => void;
-  reorderDepartments: (newOrder: Department[]) => void;
+  addDepartment: (dept: Omit<Department, 'id'>) => Promise<void>;
+  updateDepartment: (id: string, dept: Partial<Department>) => Promise<void>;
+  deleteDepartment: (id: string) => Promise<void>;
+  reorderDepartments: (newOrder: Department[]) => Promise<void>;
 
   // Packages & Services
   packages: HealthPackage[];
-  addPackage: (pkg: Omit<HealthPackage, 'id'>) => void;
-  updatePackage: (id: string, pkg: Partial<HealthPackage>) => void;
-  deletePackage: (id: string) => void;
+  addPackage: (pkg: Omit<HealthPackage, 'id'>) => Promise<void>;
+  updatePackage: (id: string, pkg: Partial<HealthPackage>) => Promise<void>;
+  deletePackage: (id: string) => Promise<void>;
   services: ServiceFacility[];
-  addService: (srv: Omit<ServiceFacility, 'id'>) => void;
-  updateService: (id: string, srv: Partial<ServiceFacility>) => void;
-  deleteService: (id: string) => void;
+  addService: (srv: Omit<ServiceFacility, 'id'>) => Promise<void>;
+  updateService: (id: string, srv: Partial<ServiceFacility>) => Promise<void>;
+  deleteService: (id: string) => Promise<void>;
 
   // Gallery
   gallery: GalleryItem[];
-  addGalleryItem: (item: Omit<GalleryItem, 'id'>) => void;
-  deleteGalleryItem: (id: string) => void;
+  addGalleryItem: (item: Omit<GalleryItem, 'id'>) => Promise<void>;
+  deleteGalleryItem: (id: string) => Promise<void>;
 
   // Testimonials
   testimonials: Testimonial[];
-  addTestimonial: (item: Omit<Testimonial, 'id'>) => void;
-  updateTestimonial: (id: string, item: Partial<Testimonial>) => void;
-  deleteTestimonial: (id: string) => void;
+  addTestimonial: (item: Omit<Testimonial, 'id'>) => Promise<void>;
+  updateTestimonial: (id: string, item: Partial<Testimonial>) => Promise<void>;
+  deleteTestimonial: (id: string) => Promise<void>;
 
   // FAQs
   faqs: FAQItem[];
-  addFaq: (item: Omit<FAQItem, 'id'>) => void;
-  updateFaq: (id: string, item: Partial<FAQItem>) => void;
-  deleteFaq: (id: string) => void;
+  addFaq: (item: Omit<FAQItem, 'id'>) => Promise<void>;
+  updateFaq: (id: string, item: Partial<FAQItem>) => Promise<void>;
+  deleteFaq: (id: string) => Promise<void>;
 
   // Patients
   patients: PatientRecord[];
@@ -158,9 +163,9 @@ interface AdminDataContextType {
   // Messages
   messages: ContactMessage[];
   addMessage: (msg: Omit<ContactMessage, 'id' | 'createdAt' | 'read' | 'important'>) => void;
-  markMessageRead: (id: string, read: boolean) => void;
-  toggleMessageImportant: (id: string) => void;
-  deleteMessage: (id: string) => void;
+  markMessageRead: (id: string, read: boolean) => Promise<void>;
+  toggleMessageImportant: (id: string) => Promise<void>;
+  deleteMessage: (id: string) => Promise<void>;
 
   // Staff Users
   staffUsers: StaffUser[];
@@ -185,47 +190,27 @@ interface AdminDataContextType {
 const AdminDataContext = createContext<AdminDataContextType | undefined>(undefined);
 
 export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Helper to load from LocalStorage with fallback
-  const getStored = <T,>(key: string, fallback: T): T => {
-    try {
-      const item = localStorage.getItem(`dad_${key}`);
-      return item ? JSON.parse(item) : fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
-  const saveStored = <T,>(key: string, data: T) => {
-    try {
-      localStorage.setItem(`dad_${key}`, JSON.stringify(data));
-    } catch (e) {
-      console.warn('Storage quota error', e);
-    }
-  };
+  const isSupabaseActive = isSupabaseConfigured();
 
   // State slices
-  const [hospitalConfig, setHospitalConfig] = useState(() => getStored('config', INITIAL_CONFIG));
-  const [settings, setSettings] = useState(() => getStored('settings', INITIAL_HOSPITAL_SETTINGS));
-  const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(() => getStored('homepage_settings', INITIAL_HOMEPAGE_SETTINGS));
-  const [appointments, setAppointments] = useState(() => getStored('appointments', INITIAL_APPOINTMENTS));
-  const [doctors, setDoctors] = useState<Doctor[]>(() => {
-    const stored = getStored('doctors', INITIAL_DOCTORS);
-    const existingIds = new Set(stored.map((d: Doctor) => d.id));
-    const missing = INITIAL_DOCTORS.filter((d) => !existingIds.has(d.id));
-    return missing.length > 0 ? [...stored, ...missing] : stored;
-  });
-  const [departments, setDepartments] = useState(() => getStored('departments', INITIAL_DEPARTMENTS));
-  const [packages, setPackages] = useState(() => getStored('packages', INITIAL_PACKAGES));
-  const [services, setServices] = useState<ServiceFacility[]>(() => getStored('services', INITIAL_SERVICES));
-  const [gallery, setGallery] = useState<GalleryItem[]>(() => getStored('gallery', INITIAL_GALLERY));
-  const [testimonials, setTestimonials] = useState<Testimonial[]>(() => getStored('testimonials', INITIAL_TESTIMONIALS));
-  const [faqs, setFaqs] = useState<FAQItem[]>(() => getStored('faqs', INITIAL_FAQS));
-  const [patients, setPatients] = useState(() => getStored('patients', INITIAL_PATIENTS));
-  const [labReports, setLabReports] = useState(() => getStored('lab_reports', INITIAL_LAB_REPORTS));
-  const [invoices, setInvoices] = useState(() => getStored('invoices', INITIAL_INVOICES));
-  const [messages, setMessages] = useState(() => getStored('messages', INITIAL_MESSAGES));
-  const [staffUsers, setStaffUsers] = useState(() => getStored('staff_users', INITIAL_STAFF_USERS));
-  const [activityLogs, setActivityLogs] = useState(() => getStored('activity_logs', INITIAL_ACTIVITY_LOGS));
+  const [isLoading, setIsLoading] = useState(true);
+  const [hospitalConfig, setHospitalConfig] = useState(INITIAL_CONFIG);
+  const [settings, setSettings] = useState(INITIAL_HOSPITAL_SETTINGS);
+  const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(INITIAL_HOMEPAGE_SETTINGS);
+  const [appointments, setAppointments] = useState<AdminAppointment[]>(INITIAL_APPOINTMENTS);
+  const [doctors, setDoctors] = useState<Doctor[]>(INITIAL_DOCTORS);
+  const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
+  const [packages, setPackages] = useState<HealthPackage[]>(INITIAL_PACKAGES);
+  const [services, setServices] = useState<ServiceFacility[]>(INITIAL_SERVICES);
+  const [gallery, setGallery] = useState<GalleryItem[]>(INITIAL_GALLERY);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>(INITIAL_TESTIMONIALS);
+  const [faqs, setFaqs] = useState<FAQItem[]>(INITIAL_FAQS);
+  const [patients, setPatients] = useState<PatientRecord[]>(INITIAL_PATIENTS);
+  const [labReports, setLabReports] = useState<LabReportRecord[]>(INITIAL_LAB_REPORTS);
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>(INITIAL_INVOICES);
+  const [messages, setMessages] = useState<ContactMessage[]>(INITIAL_MESSAGES);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>(INITIAL_STAFF_USERS);
+  const [activityLogs, setActivityLogs] = useState<ActivityLogItem[]>(INITIAL_ACTIVITY_LOGS);
 
   // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -243,7 +228,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // Activity Logger
-  const logAction = (action: string, module: string, details: string) => {
+  const logAction = async (action: string, module: string, details: string) => {
     const newLog: ActivityLogItem = {
       id: `log-${Date.now()}`,
       userEmail: 'admin@daraldawa.pk',
@@ -254,42 +239,407 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       details,
       timestamp: new Date().toISOString()
     };
-    const updated = [newLog, ...activityLogs];
-    setActivityLogs(updated);
-    saveStored('activity_logs', updated);
-  };
+    setActivityLogs((prev) => [newLog, ...prev]);
 
-  // Sync to Firestore if online
-  const syncToFirestore = async (collectionName: string, docId: string, data: any) => {
-    try {
-      await setDoc(doc(db, collectionName, docId), data, { merge: true });
-    } catch {
-      // Offline or permission - localStorage handles immediate reliability
+    if (isSupabaseActive) {
+      try {
+        await supabase.from('activity_logs').insert({
+          id: newLog.id,
+          user_email: newLog.userEmail,
+          user_name: newLog.userName,
+          user_role: newLog.userRole,
+          action: newLog.action,
+          module: newLog.module,
+          details: newLog.details,
+          timestamp: newLog.timestamp
+        });
+      } catch (err) {
+        console.warn('Failed to log activity to Supabase:', err);
+      }
     }
   };
 
+  // ============================================================================
+  // SUPABASE DATA FETCHING
+  // ============================================================================
+
+  const fetchSupabaseData = useCallback(async () => {
+    if (!isSupabaseActive) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // 1. Hospital Settings
+      const { data: configData } = await supabase.from('hospital_settings').select('*').eq('id', 'main').single();
+      if (configData) {
+        setHospitalConfig({
+          name: configData.name || INITIAL_CONFIG.name,
+          nameUrdu: configData.name_urdu || INITIAL_CONFIG.nameUrdu,
+          tagline: configData.tagline || INITIAL_CONFIG.tagline,
+          taglineUrdu: configData.tagline_urdu || INITIAL_CONFIG.taglineUrdu,
+          logo: configData.logo || INITIAL_CONFIG.logo,
+          favicon: configData.favicon || INITIAL_CONFIG.favicon,
+          shortDesc: configData.short_desc || INITIAL_CONFIG.shortDesc,
+          shortDescUrdu: configData.short_desc_urdu || INITIAL_CONFIG.shortDescUrdu,
+          socialLinks: configData.social_links || INITIAL_CONFIG.socialLinks,
+          contact: configData.contact || INITIAL_CONFIG.contact,
+          trustStats: INITIAL_CONFIG.trustStats,
+          accreditations: INITIAL_CONFIG.accreditations,
+          insurancePartners: INITIAL_CONFIG.insurancePartners
+        });
+      }
+
+      // 2. Operational Settings
+      const { data: opData } = await supabase.from('operational_settings').select('*').eq('id', 'main').single();
+      if (opData) {
+        setSettings({
+          slotDurationMinutes: opData.slot_duration_minutes ?? INITIAL_HOSPITAL_SETTINGS.slotDurationMinutes,
+          workingDays: opData.working_days || INITIAL_HOSPITAL_SETTINGS.workingDays,
+          opdOpenTime: opData.opd_open_time || INITIAL_HOSPITAL_SETTINGS.opdOpenTime,
+          opdCloseTime: opData.opd_close_time || INITIAL_HOSPITAL_SETTINGS.opdCloseTime,
+          emergencyActive: opData.emergency_active ?? INITIAL_HOSPITAL_SETTINGS.emergencyActive,
+          maintenanceMode: opData.maintenance_mode ?? INITIAL_HOSPITAL_SETTINGS.maintenanceMode,
+          emailNotifications: opData.email_notifications ?? INITIAL_HOSPITAL_SETTINGS.emailNotifications,
+          smsNotifications: opData.sms_notifications ?? INITIAL_HOSPITAL_SETTINGS.smsNotifications,
+          whatsappConfirmation: opData.whatsapp_confirmation ?? INITIAL_HOSPITAL_SETTINGS.whatsappConfirmation,
+          currency: opData.currency || INITIAL_HOSPITAL_SETTINGS.currency
+        });
+      }
+
+      // 3. Homepage Settings
+      const { data: homeData } = await supabase.from('homepage_settings').select('*').eq('id', 'main').single();
+      if (homeData) {
+        setHomepageSettings({
+          heroHeading: homeData.hero_heading || INITIAL_HOMEPAGE_SETTINGS.heroHeading,
+          heroSubheading: homeData.hero_subheading || INITIAL_HOMEPAGE_SETTINGS.heroSubheading,
+          heroButtonText: homeData.hero_button_text || INITIAL_HOMEPAGE_SETTINGS.heroButtonText,
+          heroSliderImages: homeData.hero_slider_images || INITIAL_HOMEPAGE_SETTINGS.heroSliderImages,
+          aboutBadge: homeData.about_badge || INITIAL_HOMEPAGE_SETTINGS.aboutBadge,
+          aboutHeading: homeData.about_heading || INITIAL_HOMEPAGE_SETTINGS.aboutHeading,
+          aboutSubheading: homeData.about_subheading || INITIAL_HOMEPAGE_SETTINGS.aboutSubheading,
+          aboutMission: homeData.about_mission || INITIAL_HOMEPAGE_SETTINGS.aboutMission,
+          aboutVision: homeData.about_vision || INITIAL_HOMEPAGE_SETTINGS.aboutVision,
+          aboutImage: homeData.about_image || INITIAL_HOMEPAGE_SETTINGS.aboutImage,
+          sectionsVisibility: homeData.sections_visibility || INITIAL_HOMEPAGE_SETTINGS.sectionsVisibility
+        });
+      }
+
+      // 4. Departments
+      const { data: deptsData } = await supabase.from('departments').select('*').order('display_order', { ascending: true });
+      if (deptsData && deptsData.length > 0) {
+        setDepartments(
+          deptsData.map((d: any) => ({
+            id: d.id,
+            title: d.title,
+            titleUrdu: d.title_urdu,
+            iconName: d.icon_name,
+            description: d.description,
+            descriptionUrdu: d.description_urdu,
+            fullDescription: d.full_description,
+            image: d.image,
+            order: d.display_order,
+            features: d.features || [],
+            featuresUrdu: d.features_urdu || [],
+            headDoctor: d.head_doctor || ''
+          }))
+        );
+      }
+
+      // 5. Doctors
+      const { data: docsData } = await supabase.from('doctors').select('*').order('name', { ascending: true });
+      if (docsData && docsData.length > 0) {
+        setDoctors(
+          docsData.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            nameUrdu: d.name_urdu,
+            departmentId: d.department_id,
+            specialty: d.specialty,
+            specialtyUrdu: d.specialty_urdu,
+            qualification: d.qualification,
+            experience: d.experience,
+            opdTimings: d.opd_timings,
+            opdTimingsUrdu: d.opd_timings_urdu,
+            days: d.days,
+            daysUrdu: d.days_urdu,
+            feePKR: Number(d.fee_pkr) || 0,
+            image: d.image,
+            about: d.about || '',
+            aboutUrdu: d.about_urdu || '',
+            pmdcNo: d.pmdc_no || '',
+            active: d.active ?? true
+          }))
+        );
+      }
+
+      // 6. Appointments
+      const { data: apptsData } = await supabase.from('appointments').select('*').order('created_at', { ascending: false });
+      if (apptsData && apptsData.length > 0) {
+        setAppointments(
+          apptsData.map((a: any) => ({
+            id: a.id,
+            token: a.token,
+            patientName: a.patient_name,
+            phone: a.phone,
+            cnic: a.cnic,
+            departmentId: a.department_id,
+            doctorId: a.doctor_id,
+            appointmentDate: a.appointment_date,
+            timeSlot: a.time_slot,
+            patientType: a.patient_type || 'new',
+            notes: a.notes,
+            status: a.status as AppointmentStatus,
+            createdAt: a.created_at
+          }))
+        );
+      }
+
+      // 7. Services
+      const { data: srvData } = await supabase.from('services').select('*');
+      if (srvData && srvData.length > 0) {
+        setServices(
+          srvData.map((s: any) => ({
+            id: s.id,
+            title: s.title,
+            titleUrdu: s.title_urdu,
+            iconName: s.icon_name,
+            description: s.description,
+            descriptionUrdu: s.description_urdu,
+            badge: s.badge,
+            badgeUrdu: s.badge_urdu,
+            image: s.image
+          }))
+        );
+      }
+
+      // 8. Packages
+      const { data: pkgData } = await supabase.from('packages').select('*');
+      if (pkgData && pkgData.length > 0) {
+        setPackages(
+          pkgData.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            titleUrdu: p.title_urdu,
+            originalPrice: Number(p.original_price),
+            discountedPrice: Number(p.discounted_price),
+            popular: p.popular ?? false,
+            category: p.category,
+            categoryUrdu: p.category_urdu,
+            fastingRequired: p.fasting_required,
+            fastingRequiredUrdu: p.fasting_required_urdu,
+            reportTime: p.report_time,
+            reportTimeUrdu: p.report_time_urdu,
+            testsIncluded: p.tests_included || [],
+            testsIncludedUrdu: p.tests_included_urdu || []
+          }))
+        );
+      }
+
+      // 9. Gallery
+      const { data: galData } = await supabase.from('gallery').select('*');
+      if (galData && galData.length > 0) {
+        setGallery(
+          galData.map((g: any) => ({
+            id: g.id,
+            title: g.title,
+            titleUrdu: g.title_urdu,
+            category: g.category,
+            categoryLabel: g.category_label,
+            categoryLabelUrdu: g.category_label_urdu,
+            image: g.image,
+            description: g.description,
+            descriptionUrdu: g.description_urdu
+          }))
+        );
+      }
+
+      // 10. Testimonials
+      const { data: testData } = await supabase.from('testimonials').select('*');
+      if (testData && testData.length > 0) {
+        setTestimonials(
+          testData.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            nameUrdu: t.name_urdu,
+            city: t.city,
+            cityUrdu: t.city_urdu,
+            rating: t.rating ?? 5,
+            department: t.department,
+            departmentUrdu: t.department_urdu,
+            comment: t.comment,
+            commentUrdu: t.comment_urdu,
+            date: t.date,
+            avatar: t.avatar
+          }))
+        );
+      }
+
+      // 11. FAQs
+      const { data: faqsData } = await supabase.from('faqs').select('*');
+      if (faqsData && faqsData.length > 0) {
+        setFaqs(
+          faqsData.map((f: any) => ({
+            id: f.id,
+            question: f.question,
+            questionUrdu: f.question_urdu,
+            answer: f.answer,
+            answerUrdu: f.answer_urdu,
+            category: f.category
+          }))
+        );
+      }
+
+      // 12. Messages
+      const { data: msgData } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
+      if (msgData && msgData.length > 0) {
+        setMessages(
+          msgData.map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            phone: m.phone,
+            subject: m.subject,
+            message: m.message,
+            read: m.read ?? false,
+            important: m.important ?? false,
+            createdAt: m.created_at
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Error fetching data from Supabase:', err);
+      showToast('Could not sync with Supabase cloud database. Using cached data.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isSupabaseActive]);
+
+  // Initial load
+  useEffect(() => {
+    fetchSupabaseData();
+  }, [fetchSupabaseData]);
+
+  // Real-time listener for Appointments (live updates on all devices)
+  useEffect(() => {
+    if (!isSupabaseActive) return;
+
+    const channel = supabase
+      .channel('public:appointments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newAppt: AdminAppointment = {
+              id: payload.new.id,
+              token: payload.new.token,
+              patientName: payload.new.patient_name,
+              phone: payload.new.phone,
+              cnic: payload.new.cnic,
+              departmentId: payload.new.department_id,
+              doctorId: payload.new.doctor_id,
+              appointmentDate: payload.new.appointment_date,
+              timeSlot: payload.new.time_slot,
+              patientType: payload.new.patient_type || 'new',
+              notes: payload.new.notes,
+              status: payload.new.status,
+              createdAt: payload.new.created_at
+            };
+            setAppointments((prev) => [newAppt, ...prev.filter((a) => a.id !== newAppt.id)]);
+            showToast(`New Appointment booked: ${newAppt.patientName}`, 'info');
+          } else if (payload.eventType === 'UPDATE') {
+            setAppointments((prev) =>
+              prev.map((a) =>
+                a.id === payload.new.id ? { ...a, status: payload.new.status } : a
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setAppointments((prev) => prev.filter((a) => a.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isSupabaseActive]);
+
+  // ============================================================================
+  // DATABASE WRITES & MUTATIONS
+  // ============================================================================
+
   // Hospital Config (General Settings)
-  const updateHospitalConfig = (newConfig: Partial<typeof INITIAL_CONFIG>) => {
+  const updateHospitalConfig = async (newConfig: Partial<typeof INITIAL_CONFIG>) => {
     const updated = { ...hospitalConfig, ...newConfig };
     setHospitalConfig(updated);
-    saveStored('config', updated);
-    syncToFirestore('hospital_config', 'main', updated);
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('hospital_settings').upsert({
+          id: 'main',
+          name: updated.name,
+          name_urdu: updated.nameUrdu,
+          tagline: updated.tagline,
+          tagline_urdu: updated.taglineUrdu,
+          logo: updated.logo,
+          favicon: updated.favicon,
+          short_desc: updated.shortDesc,
+          short_desc_urdu: updated.shortDescUrdu,
+          social_links: updated.socialLinks,
+          contact: updated.contact,
+          updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        showToast('General settings saved permanently to Supabase!');
+      } catch (err: any) {
+        console.error('Failed to update hospital_settings:', err);
+        showToast(`Save failed: ${err?.message || 'Check database connection'}`, 'error');
+      }
+    } else {
+      showToast('Settings updated (add Supabase credentials to sync across devices)');
+    }
+
     logAction('Updated General Settings', 'Settings', 'Hospital details, contact info, or branding updated.');
-    showToast('General hospital settings saved successfully!');
   };
 
-  // Settings
-  const updateSettings = (newSettings: Partial<HospitalSettings>) => {
+  // Operational Settings
+  const updateSettings = async (newSettings: Partial<HospitalSettings>) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
-    saveStored('settings', updated);
-    syncToFirestore('hospital_config', 'settings', updated);
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('operational_settings').upsert({
+          id: 'main',
+          slot_duration_minutes: updated.slotDurationMinutes,
+          working_days: updated.workingDays,
+          opd_open_time: updated.opdOpenTime,
+          opd_close_time: updated.opdCloseTime,
+          emergency_active: updated.emergencyActive,
+          maintenance_mode: updated.maintenanceMode,
+          email_notifications: updated.emailNotifications,
+          sms_notifications: updated.smsNotifications,
+          whatsapp_confirmation: updated.whatsappConfirmation,
+          currency: updated.currency,
+          updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        showToast('System settings saved permanently to Supabase!');
+      } catch (err: any) {
+        console.error('Failed to update operational_settings:', err);
+        showToast(`Save failed: ${err?.message}`, 'error');
+      }
+    }
+
     logAction('Updated System Settings', 'Settings', 'Operational settings and parameters modified.');
-    showToast('Settings saved successfully!');
   };
 
   // Homepage Settings
-  const updateHomepageSettings = (newSettings: Partial<HomepageSettings>) => {
+  const updateHomepageSettings = async (newSettings: Partial<HomepageSettings>) => {
     const updated: HomepageSettings = {
       ...homepageSettings,
       ...newSettings,
@@ -299,300 +649,695 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     };
     setHomepageSettings(updated);
-    saveStored('homepage_settings', updated);
-    syncToFirestore('hospital_config', 'homepage', updated);
-    logAction('Updated Homepage Settings', 'Settings', 'Hero, About, and section visibility updated.');
-    showToast('Homepage settings saved successfully!');
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('homepage_settings').upsert({
+          id: 'main',
+          hero_heading: updated.heroHeading,
+          hero_subheading: updated.heroSubheading,
+          hero_button_text: updated.heroButtonText,
+          hero_slider_images: updated.heroSliderImages,
+          about_badge: updated.aboutBadge,
+          about_heading: updated.aboutHeading,
+          about_subheading: updated.aboutSubheading,
+          about_mission: updated.aboutMission,
+          about_vision: updated.aboutVision,
+          about_image: updated.aboutImage,
+          sections_visibility: updated.sectionsVisibility,
+          updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        showToast('Homepage settings saved permanently to Supabase!');
+      } catch (err: any) {
+        console.error('Failed to update homepage_settings:', err);
+        showToast(`Save failed: ${err?.message}`, 'error');
+      }
+    }
+
+    logAction('Updated Homepage CMS', 'Homepage Settings', 'Hero texts, banners, or section visibility updated.');
   };
 
   // Appointments
   const addAppointment = (app: Omit<AdminAppointment, 'id' | 'createdAt'>): string => {
-    const id = `app-${Date.now()}`;
-    const newApp: AdminAppointment = {
-      ...app,
-      id,
-      createdAt: new Date().toISOString()
-    };
-    const updated = [newApp, ...appointments];
-    setAppointments(updated);
-    saveStored('appointments', updated);
-    syncToFirestore('appointments', id, newApp);
-    logAction('New Appointment Created', 'Appointments', `Appointment ${newApp.token} booked for ${newApp.patientName}.`);
-    showToast(`Appointment ${newApp.token} booked successfully!`);
-    return id;
-  };
+    const id = `apt-${Date.now()}`;
+    const token = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
+    const createdAt = new Date().toISOString();
+    const newApp: AdminAppointment = { ...app, id, token, createdAt };
 
-  const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
-    const updated = appointments.map((a) => (a.id === id ? { ...a, status, updatedAt: new Date().toISOString() } : a));
-    setAppointments(updated);
-    saveStored('appointments', updated);
-    const target = appointments.find((a) => a.id === id);
-    if (target) {
-      syncToFirestore('appointments', id, { ...target, status });
-      logAction('Appointment Status Changed', 'Appointments', `Appointment ${target.token} marked as ${status.toUpperCase()}.`);
+    setAppointments((prev) => [newApp, ...prev]);
+
+    if (isSupabaseActive) {
+      supabase.from('appointments').insert({
+        id: newApp.id,
+        token: newApp.token,
+        patient_name: newApp.patientName,
+        phone: newApp.phone,
+        cnic: newApp.cnic || null,
+        department_id: newApp.departmentId,
+        doctor_id: newApp.doctorId || null,
+        appointment_date: newApp.appointmentDate,
+        time_slot: newApp.timeSlot,
+        patient_type: newApp.patientType,
+        notes: newApp.notes || null,
+        status: newApp.status,
+        created_at: newApp.createdAt
+      }).then(({ error }) => {
+        if (error) {
+          console.error('Failed to insert appointment into Supabase:', error);
+        }
+      });
     }
-    showToast(`Appointment status updated to ${status}.`);
+
+    logAction('New Appointment Request', 'Appointments', `Appointment booked for ${app.patientName} (${token}).`);
+    return token;
   };
 
-  const deleteAppointment = (id: string) => {
-    const target = appointments.find((a) => a.id === id);
-    const updated = appointments.filter((a) => a.id !== id);
-    setAppointments(updated);
-    saveStored('appointments', updated);
-    logAction('Appointment Deleted', 'Appointments', `Deleted appointment ${target?.token || id}.`);
-    showToast('Appointment deleted.', 'info');
+  const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status } : a))
+    );
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
+        if (error) throw error;
+      } catch (err: any) {
+        showToast(`Status update failed: ${err?.message}`, 'error');
+        return;
+      }
+    }
+    showToast(`Appointment status updated to ${status}`);
+    logAction('Updated Appointment Status', 'Appointments', `Appointment ${id} changed to ${status}.`);
+  };
+
+  const deleteAppointment = async (id: string) => {
+    setAppointments((prev) => prev.filter((a) => a.id !== id));
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('appointments').delete().eq('id', id);
+        if (error) throw error;
+      } catch (err: any) {
+        showToast(`Delete failed: ${err?.message}`, 'error');
+        return;
+      }
+    }
+    showToast('Appointment removed successfully');
+    logAction('Deleted Appointment', 'Appointments', `Deleted appointment record ${id}.`);
   };
 
   // Doctors
-  const addDoctor = (docItem: Omit<Doctor, 'id'>) => {
+  const addDoctor = async (doc: Omit<Doctor, 'id'>) => {
     const id = `doc-${Date.now()}`;
-    const newDoctor: Doctor = { ...docItem, id, active: docItem.active !== false };
-    const updated = [...doctors, newDoctor];
-    setDoctors(updated);
-    saveStored('doctors', updated);
-    syncToFirestore('doctors', id, newDoctor);
-    logAction('Added New Doctor', 'Doctors', `Added consultant ${newDoctor.name} to ${newDoctor.departmentId}.`);
-    showToast(`Doctor ${newDoctor.name} added!`);
+    const newDoc: Doctor = { ...doc, id };
+    setDoctors((prev) => [...prev, newDoc]);
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('doctors').insert({
+          id: newDoc.id,
+          name: newDoc.name,
+          name_urdu: newDoc.nameUrdu,
+          department_id: newDoc.departmentId,
+          specialty: newDoc.specialty,
+          specialty_urdu: newDoc.specialtyUrdu,
+          qualification: newDoc.qualification,
+          experience: newDoc.experience,
+          opd_timings: newDoc.opdTimings,
+          opd_timings_urdu: newDoc.opdTimingsUrdu,
+          days: newDoc.days,
+          days_urdu: newDoc.daysUrdu,
+          fee_pkr: newDoc.feePKR,
+          image: newDoc.image,
+          about: newDoc.about,
+          about_urdu: newDoc.aboutUrdu,
+          pmdc_no: newDoc.pmdcNo,
+          active: newDoc.active ?? true
+        });
+        if (error) throw error;
+        showToast(`Doctor ${newDoc.name} added permanently to Supabase!`);
+      } catch (err: any) {
+        showToast(`Failed to add doctor: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      showToast(`Doctor ${newDoc.name} added!`);
+    }
+
+    logAction('Added Doctor', 'Doctors', `Added consultant ${doc.name}.`);
   };
 
-  const updateDoctor = (id: string, docData: Partial<Doctor>) => {
-    const updated = doctors.map((d) => (d.id === id ? { ...d, ...docData } : d));
-    setDoctors(updated);
-    saveStored('doctors', updated);
-    syncToFirestore('doctors', id, docData);
-    logAction('Updated Doctor', 'Doctors', `Updated doctor record ID: ${id}.`);
-    showToast('Doctor record updated!');
+  const updateDoctor = async (id: string, docUpdate: Partial<Doctor>) => {
+    setDoctors((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, ...docUpdate } : d))
+    );
+
+    if (isSupabaseActive) {
+      try {
+        const dbPayload: any = { updated_at: new Date().toISOString() };
+        if (docUpdate.name !== undefined) dbPayload.name = docUpdate.name;
+        if (docUpdate.nameUrdu !== undefined) dbPayload.name_urdu = docUpdate.nameUrdu;
+        if (docUpdate.departmentId !== undefined) dbPayload.department_id = docUpdate.departmentId;
+        if (docUpdate.specialty !== undefined) dbPayload.specialty = docUpdate.specialty;
+        if (docUpdate.specialtyUrdu !== undefined) dbPayload.specialty_urdu = docUpdate.specialtyUrdu;
+        if (docUpdate.qualification !== undefined) dbPayload.qualification = docUpdate.qualification;
+        if (docUpdate.experience !== undefined) dbPayload.experience = docUpdate.experience;
+        if (docUpdate.opdTimings !== undefined) dbPayload.opd_timings = docUpdate.opdTimings;
+        if (docUpdate.opdTimingsUrdu !== undefined) dbPayload.opd_timings_urdu = docUpdate.opdTimingsUrdu;
+        if (docUpdate.days !== undefined) dbPayload.days = docUpdate.days;
+        if (docUpdate.daysUrdu !== undefined) dbPayload.days_urdu = docUpdate.daysUrdu;
+        if (docUpdate.feePKR !== undefined) dbPayload.fee_pkr = docUpdate.feePKR;
+        if (docUpdate.image !== undefined) dbPayload.image = docUpdate.image;
+        if (docUpdate.about !== undefined) dbPayload.about = docUpdate.about;
+        if (docUpdate.aboutUrdu !== undefined) dbPayload.about_urdu = docUpdate.aboutUrdu;
+        if (docUpdate.pmdcNo !== undefined) dbPayload.pmdc_no = docUpdate.pmdcNo;
+        if (docUpdate.active !== undefined) dbPayload.active = docUpdate.active;
+
+        const { error } = await supabase.from('doctors').update(dbPayload).eq('id', id);
+        if (error) throw error;
+        showToast('Doctor details updated in Supabase!');
+      } catch (err: any) {
+        showToast(`Update failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      showToast('Doctor details updated!');
+    }
+
+    logAction('Updated Doctor', 'Doctors', `Updated doctor profile ${id}.`);
   };
 
-  const deleteDoctor = (id: string) => {
-    const updated = doctors.filter((d) => d.id !== id);
-    setDoctors(updated);
-    saveStored('doctors', updated);
-    logAction('Removed Doctor', 'Doctors', `Doctor ${id} removed from faculty.`);
-    showToast('Doctor removed.', 'info');
+  const deleteDoctor = async (id: string) => {
+    setDoctors((prev) => prev.filter((d) => d.id !== id));
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('doctors').delete().eq('id', id);
+        if (error) throw error;
+        showToast('Doctor deleted from Supabase!');
+      } catch (err: any) {
+        showToast(`Delete failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      showToast('Doctor removed successfully');
+    }
+
+    logAction('Deleted Doctor', 'Doctors', `Deleted doctor ${id}.`);
   };
 
-  const toggleDoctorActive = (id: string) => {
-    const updated = doctors.map((d) => (d.id === id ? { ...d, active: d.active === false ? true : false } : d));
-    setDoctors(updated);
-    saveStored('doctors', updated);
-    const docItem = updated.find((d) => d.id === id);
-    logAction('Doctor Status Changed', 'Doctors', `Doctor ${docItem?.name || id} is now ${docItem?.active ? 'Active' : 'Inactive'}.`);
-    showToast(`Doctor ${docItem?.name || id} is now ${docItem?.active ? 'Active' : 'Inactive'}.`);
+  const toggleDoctorActive = async (id: string) => {
+    const doc = doctors.find((d) => d.id === id);
+    if (!doc) return;
+    const newStatus = !(doc.active ?? true);
+    await updateDoctor(id, { active: newStatus });
   };
 
   // Departments
-  const addDepartment = (deptItem: Omit<Department, 'id'>) => {
+  const addDepartment = async (dept: Omit<Department, 'id'>) => {
     const id = `dept-${Date.now()}`;
-    const newDept: Department = { ...deptItem, id };
-    const updated = [...departments, newDept];
-    setDepartments(updated);
-    saveStored('departments', updated);
-    syncToFirestore('departments', id, newDept);
-    logAction('Added Department', 'Departments', `Added department ${newDept.title}.`);
-    showToast(`Department ${newDept.title} added!`);
+    const newDept: Department = { ...dept, id };
+    setDepartments((prev) => [...prev, newDept]);
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('departments').insert({
+          id: newDept.id,
+          title: newDept.title,
+          title_urdu: newDept.titleUrdu,
+          icon_name: newDept.iconName,
+          description: newDept.description,
+          description_urdu: newDept.descriptionUrdu,
+          full_description: newDept.fullDescription,
+          image: newDept.image,
+          display_order: newDept.order || departments.length + 1,
+          features: newDept.features || [],
+          features_urdu: newDept.featuresUrdu || [],
+          head_doctor: newDept.headDoctor || ''
+        });
+        if (error) throw error;
+        showToast(`Department ${newDept.title} added to Supabase!`);
+      } catch (err: any) {
+        showToast(`Add department failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      showToast(`Department ${newDept.title} added!`);
+    }
+
+    logAction('Added Department', 'Departments', `Added department ${dept.title}.`);
   };
 
-  const updateDepartment = (id: string, deptData: Partial<Department>) => {
-    const updated = departments.map((d) => (d.id === id ? { ...d, ...deptData } : d));
-    setDepartments(updated);
-    saveStored('departments', updated);
-    syncToFirestore('departments', id, deptData);
+  const updateDepartment = async (id: string, deptUpdate: Partial<Department>) => {
+    setDepartments((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, ...deptUpdate } : d))
+    );
+
+    if (isSupabaseActive) {
+      try {
+        const payload: any = { updated_at: new Date().toISOString() };
+        if (deptUpdate.title !== undefined) payload.title = deptUpdate.title;
+        if (deptUpdate.titleUrdu !== undefined) payload.title_urdu = deptUpdate.titleUrdu;
+        if (deptUpdate.iconName !== undefined) payload.icon_name = deptUpdate.iconName;
+        if (deptUpdate.description !== undefined) payload.description = deptUpdate.description;
+        if (deptUpdate.descriptionUrdu !== undefined) payload.description_urdu = deptUpdate.descriptionUrdu;
+        if (deptUpdate.fullDescription !== undefined) payload.full_description = deptUpdate.fullDescription;
+        if (deptUpdate.image !== undefined) payload.image = deptUpdate.image;
+        if (deptUpdate.order !== undefined) payload.display_order = deptUpdate.order;
+        if (deptUpdate.features !== undefined) payload.features = deptUpdate.features;
+        if (deptUpdate.featuresUrdu !== undefined) payload.features_urdu = deptUpdate.featuresUrdu;
+        if (deptUpdate.headDoctor !== undefined) payload.head_doctor = deptUpdate.headDoctor;
+
+        const { error } = await supabase.from('departments').update(payload).eq('id', id);
+        if (error) throw error;
+        showToast('Department updated in Supabase!');
+      } catch (err: any) {
+        showToast(`Update department failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      showToast('Department updated!');
+    }
+
     logAction('Updated Department', 'Departments', `Updated department ${id}.`);
-    showToast('Department updated!');
   };
 
-  const deleteDepartment = (id: string) => {
-    const updated = departments.filter((d) => d.id !== id);
+  const deleteDepartment = async (id: string) => {
+    setDepartments((prev) => prev.filter((d) => d.id !== id));
+
+    if (isSupabaseActive) {
+      try {
+        const { error } = await supabase.from('departments').delete().eq('id', id);
+        if (error) throw error;
+        showToast('Department deleted from Supabase!');
+      } catch (err: any) {
+        showToast(`Delete department failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      showToast('Department removed successfully');
+    }
+
+    logAction('Deleted Department', 'Departments', `Deleted department ${id}.`);
+  };
+
+  const reorderDepartments = async (newOrder: Department[]) => {
+    const updated = newOrder.map((dept, index) => ({ ...dept, order: index + 1 }));
     setDepartments(updated);
-    saveStored('departments', updated);
-    logAction('Removed Department', 'Departments', `Removed department ${id}.`);
-    showToast('Department removed.', 'info');
-  };
 
-  const reorderDepartments = (newOrder: Department[]) => {
-    setDepartments(newOrder);
-    saveStored('departments', newOrder);
-    showToast('Departments order saved!');
+    if (isSupabaseActive) {
+      try {
+        for (const dept of updated) {
+          await supabase.from('departments').update({ display_order: dept.order }).eq('id', dept.id);
+        }
+        showToast('Department order updated in Supabase!');
+      } catch (err: any) {
+        showToast(`Reorder failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      showToast('Department display order updated!');
+    }
+
+    logAction('Reordered Departments', 'Departments', 'Updated department order sequence.');
   };
 
   // Services
-  const addService = (srv: Omit<ServiceFacility, 'id'>) => {
+  const addService = async (srv: Omit<ServiceFacility, 'id'>) => {
     const id = `srv-${Date.now()}`;
-    const newSrv: ServiceFacility = { ...srv, id };
-    const updated = [...services, newSrv];
-    setServices(updated);
-    saveStored('services', updated);
-    showToast('Service added successfully!');
+    const newSrv = { ...srv, id };
+    setServices((prev) => [...prev, newSrv]);
+
+    if (isSupabaseActive) {
+      try {
+        await supabase.from('services').insert({
+          id: newSrv.id,
+          title: newSrv.title,
+          title_urdu: newSrv.titleUrdu,
+          icon_name: newSrv.iconName,
+          description: newSrv.description,
+          description_urdu: newSrv.descriptionUrdu,
+          badge: newSrv.badge,
+          badge_urdu: newSrv.badgeUrdu,
+          image: newSrv.image
+        });
+      } catch (err) {
+        console.error('Failed to insert service into Supabase:', err);
+      }
+    }
+    showToast(`Service "${newSrv.title}" added successfully!`);
+    logAction('Added Service', 'Services', `Added service ${srv.title}.`);
   };
 
-  const updateService = (id: string, srvData: Partial<ServiceFacility>) => {
-    const updated = services.map((s) => (s.id === id ? { ...s, ...srvData } : s));
-    setServices(updated);
-    saveStored('services', updated);
-    showToast('Service updated successfully!');
+  const updateService = async (id: string, srvUpdate: Partial<ServiceFacility>) => {
+    setServices((prev) => prev.map((s) => (s.id === id ? { ...s, ...srvUpdate } : s)));
+
+    if (isSupabaseActive) {
+      try {
+        const payload: any = { updated_at: new Date().toISOString() };
+        if (srvUpdate.title !== undefined) payload.title = srvUpdate.title;
+        if (srvUpdate.titleUrdu !== undefined) payload.title_urdu = srvUpdate.titleUrdu;
+        if (srvUpdate.iconName !== undefined) payload.icon_name = srvUpdate.iconName;
+        if (srvUpdate.description !== undefined) payload.description = srvUpdate.description;
+        if (srvUpdate.descriptionUrdu !== undefined) payload.description_urdu = srvUpdate.descriptionUrdu;
+        if (srvUpdate.badge !== undefined) payload.badge = srvUpdate.badge;
+        if (srvUpdate.badgeUrdu !== undefined) payload.badge_urdu = srvUpdate.badgeUrdu;
+        if (srvUpdate.image !== undefined) payload.image = srvUpdate.image;
+
+        await supabase.from('services').update(payload).eq('id', id);
+      } catch (err) {
+        console.error('Failed to update service in Supabase:', err);
+      }
+    }
+    showToast('Service details updated!');
+    logAction('Updated Service', 'Services', `Updated service ${id}.`);
   };
 
-  const deleteService = (id: string) => {
-    const updated = services.filter((s) => s.id !== id);
-    setServices(updated);
-    saveStored('services', updated);
-    showToast('Service removed.', 'info');
-  };
-
-  // Gallery
-  const addGalleryItem = (item: Omit<GalleryItem, 'id'>) => {
-    const id = `gal-${Date.now()}`;
-    const newItem: GalleryItem = { ...item, id };
-    const updated = [...gallery, newItem];
-    setGallery(updated);
-    saveStored('gallery', updated);
-    showToast('Gallery image added!');
-  };
-
-  const deleteGalleryItem = (id: string) => {
-    const updated = gallery.filter((g) => g.id !== id);
-    setGallery(updated);
-    saveStored('gallery', updated);
-    showToast('Gallery image removed.', 'info');
-  };
-
-  // Testimonials
-  const addTestimonial = (item: Omit<Testimonial, 'id'>) => {
-    const id = `test-${Date.now()}`;
-    const newItem: Testimonial = { ...item, id };
-    const updated = [...testimonials, newItem];
-    setTestimonials(updated);
-    saveStored('testimonials', updated);
-    showToast('Testimonial added!');
-  };
-
-  const updateTestimonial = (id: string, itemData: Partial<Testimonial>) => {
-    const updated = testimonials.map((t) => (t.id === id ? { ...t, ...itemData } : t));
-    setTestimonials(updated);
-    saveStored('testimonials', updated);
-    showToast('Testimonial updated!');
-  };
-
-  const deleteTestimonial = (id: string) => {
-    const updated = testimonials.filter((t) => t.id !== id);
-    setTestimonials(updated);
-    saveStored('testimonials', updated);
-    showToast('Testimonial deleted.', 'info');
-  };
-
-  // FAQs
-  const addFaq = (item: Omit<FAQItem, 'id'>) => {
-    const id = `faq-${Date.now()}`;
-    const newItem: FAQItem = { ...item, id };
-    const updated = [...faqs, newItem];
-    setFaqs(updated);
-    saveStored('faqs', updated);
-    showToast('FAQ added!');
-  };
-
-  const updateFaq = (id: string, itemData: Partial<FAQItem>) => {
-    const updated = faqs.map((f) => (f.id === id ? { ...f, ...itemData } : f));
-    setFaqs(updated);
-    saveStored('faqs', updated);
-    showToast('FAQ updated!');
-  };
-
-  const deleteFaq = (id: string) => {
-    const updated = faqs.filter((f) => f.id !== id);
-    setFaqs(updated);
-    saveStored('faqs', updated);
-    showToast('FAQ removed.', 'info');
+  const deleteService = async (id: string) => {
+    setServices((prev) => prev.filter((s) => s.id !== id));
+    if (isSupabaseActive) {
+      await supabase.from('services').delete().eq('id', id);
+    }
+    showToast('Service removed successfully');
+    logAction('Deleted Service', 'Services', `Deleted service ${id}.`);
   };
 
   // Packages
-  const addPackage = (pkgItem: Omit<HealthPackage, 'id'>) => {
+  const addPackage = async (pkg: Omit<HealthPackage, 'id'>) => {
     const id = `pkg-${Date.now()}`;
-    const newPkg: HealthPackage = { ...pkgItem, id };
-    const updated = [...packages, newPkg];
-    setPackages(updated);
-    saveStored('packages', updated);
-    syncToFirestore('packages', id, newPkg);
-    logAction('Added Package', 'Packages', `Added lab package ${newPkg.title}.`);
-    showToast('Package added successfully!');
+    const newPkg = { ...pkg, id };
+    setPackages((prev) => [...prev, newPkg]);
+
+    if (isSupabaseActive) {
+      try {
+        await supabase.from('packages').insert({
+          id: newPkg.id,
+          title: newPkg.title,
+          title_urdu: newPkg.titleUrdu,
+          original_price: newPkg.originalPrice,
+          discounted_price: newPkg.discountedPrice,
+          popular: newPkg.popular ?? false,
+          category: newPkg.category,
+          category_urdu: newPkg.categoryUrdu,
+          fasting_required: newPkg.fastingRequired,
+          fasting_required_urdu: newPkg.fastingRequiredUrdu,
+          report_time: newPkg.reportTime,
+          report_time_urdu: newPkg.reportTimeUrdu,
+          tests_included: newPkg.testsIncluded,
+          tests_included_urdu: newPkg.testsIncludedUrdu
+        });
+      } catch (err) {
+        console.error('Failed to add package to Supabase:', err);
+      }
+    }
+    showToast(`Package "${newPkg.title}" created!`);
+    logAction('Added Package', 'Packages', `Added package ${pkg.title}.`);
   };
 
-  const updatePackage = (id: string, pkgData: Partial<HealthPackage>) => {
-    const updated = packages.map((p) => (p.id === id ? { ...p, ...pkgData } : p));
-    setPackages(updated);
-    saveStored('packages', updated);
-    syncToFirestore('packages', id, pkgData);
-    logAction('Updated Package', 'Packages', `Updated package ${id}.`);
+  const updatePackage = async (id: string, pkgUpdate: Partial<HealthPackage>) => {
+    setPackages((prev) => prev.map((p) => (p.id === id ? { ...p, ...pkgUpdate } : p)));
+
+    if (isSupabaseActive) {
+      try {
+        const payload: any = { updated_at: new Date().toISOString() };
+        if (pkgUpdate.title !== undefined) payload.title = pkgUpdate.title;
+        if (pkgUpdate.titleUrdu !== undefined) payload.title_urdu = pkgUpdate.titleUrdu;
+        if (pkgUpdate.originalPrice !== undefined) payload.original_price = pkgUpdate.originalPrice;
+        if (pkgUpdate.discountedPrice !== undefined) payload.discounted_price = pkgUpdate.discountedPrice;
+        if (pkgUpdate.popular !== undefined) payload.popular = pkgUpdate.popular;
+        if (pkgUpdate.category !== undefined) payload.category = pkgUpdate.category;
+        if (pkgUpdate.categoryUrdu !== undefined) payload.category_urdu = pkgUpdate.categoryUrdu;
+        if (pkgUpdate.fastingRequired !== undefined) payload.fasting_required = pkgUpdate.fastingRequired;
+        if (pkgUpdate.fastingRequiredUrdu !== undefined) payload.fasting_required_urdu = pkgUpdate.fastingRequiredUrdu;
+        if (pkgUpdate.reportTime !== undefined) payload.report_time = pkgUpdate.reportTime;
+        if (pkgUpdate.reportTimeUrdu !== undefined) payload.report_time_urdu = pkgUpdate.reportTimeUrdu;
+        if (pkgUpdate.testsIncluded !== undefined) payload.tests_included = pkgUpdate.testsIncluded;
+        if (pkgUpdate.testsIncludedUrdu !== undefined) payload.tests_included_urdu = pkgUpdate.testsIncludedUrdu;
+
+        await supabase.from('packages').update(payload).eq('id', id);
+      } catch (err) {
+        console.error('Failed to update package in Supabase:', err);
+      }
+    }
     showToast('Package updated!');
+    logAction('Updated Package', 'Packages', `Updated package ${id}.`);
   };
 
-  const deletePackage = (id: string) => {
-    const updated = packages.filter((p) => p.id !== id);
-    setPackages(updated);
-    saveStored('packages', updated);
-    logAction('Removed Package', 'Packages', `Removed package ${id}.`);
-    showToast('Package removed.', 'info');
+  const deletePackage = async (id: string) => {
+    setPackages((prev) => prev.filter((p) => p.id !== id));
+    if (isSupabaseActive) {
+      await supabase.from('packages').delete().eq('id', id);
+    }
+    showToast('Package deleted');
+    logAction('Deleted Package', 'Packages', `Deleted package ${id}.`);
+  };
+
+  // Gallery
+  const addGalleryItem = async (item: Omit<GalleryItem, 'id'>) => {
+    const id = `gal-${Date.now()}`;
+    const newItem = { ...item, id };
+    setGallery((prev) => [newItem, ...prev]);
+
+    if (isSupabaseActive) {
+      try {
+        await supabase.from('gallery').insert({
+          id: newItem.id,
+          title: newItem.title,
+          title_urdu: newItem.titleUrdu,
+          category: newItem.category,
+          category_label: newItem.categoryLabel,
+          category_label_urdu: newItem.categoryLabelUrdu,
+          image: newItem.image,
+          description: newItem.description,
+          description_urdu: newItem.descriptionUrdu
+        });
+      } catch (err) {
+        console.error('Failed to add gallery item to Supabase:', err);
+      }
+    }
+    showToast('Gallery image added!');
+    logAction('Added Gallery Image', 'Gallery', `Uploaded image ${item.title}.`);
+  };
+
+  const deleteGalleryItem = async (id: string) => {
+    setGallery((prev) => prev.filter((g) => g.id !== id));
+    if (isSupabaseActive) {
+      await supabase.from('gallery').delete().eq('id', id);
+    }
+    showToast('Gallery item removed');
+    logAction('Deleted Gallery Image', 'Gallery', `Removed gallery image ${id}.`);
+  };
+
+  // Testimonials
+  const addTestimonial = async (item: Omit<Testimonial, 'id'>) => {
+    const id = `test-${Date.now()}`;
+    const newItem = { ...item, id };
+    setTestimonials((prev) => [newItem, ...prev]);
+
+    if (isSupabaseActive) {
+      try {
+        await supabase.from('testimonials').insert({
+          id: newItem.id,
+          name: newItem.name,
+          name_urdu: newItem.nameUrdu,
+          city: newItem.city,
+          city_urdu: newItem.cityUrdu,
+          rating: newItem.rating,
+          department: newItem.department,
+          department_urdu: newItem.departmentUrdu,
+          comment: newItem.comment,
+          comment_urdu: newItem.commentUrdu,
+          date: newItem.date,
+          avatar: newItem.avatar
+        });
+      } catch (err) {
+        console.error('Failed to add testimonial to Supabase:', err);
+      }
+    }
+    showToast('Testimonial published!');
+    logAction('Added Testimonial', 'Testimonials', `Added testimonial by ${item.name}.`);
+  };
+
+  const updateTestimonial = async (id: string, itemUpdate: Partial<Testimonial>) => {
+    setTestimonials((prev) => prev.map((t) => (t.id === id ? { ...t, ...itemUpdate } : t)));
+
+    if (isSupabaseActive) {
+      try {
+        const payload: any = {};
+        if (itemUpdate.name !== undefined) payload.name = itemUpdate.name;
+        if (itemUpdate.nameUrdu !== undefined) payload.name_urdu = itemUpdate.nameUrdu;
+        if (itemUpdate.city !== undefined) payload.city = itemUpdate.city;
+        if (itemUpdate.cityUrdu !== undefined) payload.city_urdu = itemUpdate.cityUrdu;
+        if (itemUpdate.rating !== undefined) payload.rating = itemUpdate.rating;
+        if (itemUpdate.department !== undefined) payload.department = itemUpdate.department;
+        if (itemUpdate.departmentUrdu !== undefined) payload.department_urdu = itemUpdate.departmentUrdu;
+        if (itemUpdate.comment !== undefined) payload.comment = itemUpdate.comment;
+        if (itemUpdate.commentUrdu !== undefined) payload.comment_urdu = itemUpdate.commentUrdu;
+        if (itemUpdate.avatar !== undefined) payload.avatar = itemUpdate.avatar;
+
+        await supabase.from('testimonials').update(payload).eq('id', id);
+      } catch (err) {
+        console.error('Failed to update testimonial in Supabase:', err);
+      }
+    }
+    showToast('Testimonial updated!');
+  };
+
+  const deleteTestimonial = async (id: string) => {
+    setTestimonials((prev) => prev.filter((t) => t.id !== id));
+    if (isSupabaseActive) {
+      await supabase.from('testimonials').delete().eq('id', id);
+    }
+    showToast('Testimonial deleted');
+    logAction('Deleted Testimonial', 'Testimonials', `Removed testimonial ${id}.`);
+  };
+
+  // FAQs
+  const addFaq = async (item: Omit<FAQItem, 'id'>) => {
+    const id = `faq-${Date.now()}`;
+    const newFaq = { ...item, id };
+    setFaqs((prev) => [...prev, newFaq]);
+
+    if (isSupabaseActive) {
+      try {
+        await supabase.from('faqs').insert({
+          id: newFaq.id,
+          question: newFaq.question,
+          question_urdu: newFaq.questionUrdu,
+          answer: newFaq.answer,
+          answer_urdu: newFaq.answerUrdu,
+          category: newFaq.category
+        });
+      } catch (err) {
+        console.error('Failed to add FAQ to Supabase:', err);
+      }
+    }
+    showToast('FAQ created!');
+    logAction('Added FAQ', 'FAQs', `Added FAQ "${item.question.slice(0, 30)}...".`);
+  };
+
+  const updateFaq = async (id: string, itemUpdate: Partial<FAQItem>) => {
+    setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, ...itemUpdate } : f)));
+
+    if (isSupabaseActive) {
+      try {
+        const payload: any = {};
+        if (itemUpdate.question !== undefined) payload.question = itemUpdate.question;
+        if (itemUpdate.questionUrdu !== undefined) payload.question_urdu = itemUpdate.questionUrdu;
+        if (itemUpdate.answer !== undefined) payload.answer = itemUpdate.answer;
+        if (itemUpdate.answerUrdu !== undefined) payload.answer_urdu = itemUpdate.answerUrdu;
+        if (itemUpdate.category !== undefined) payload.category = itemUpdate.category;
+
+        await supabase.from('faqs').update(payload).eq('id', id);
+      } catch (err) {
+        console.error('Failed to update FAQ in Supabase:', err);
+      }
+    }
+    showToast('FAQ updated!');
+  };
+
+  const deleteFaq = async (id: string) => {
+    setFaqs((prev) => prev.filter((f) => f.id !== id));
+    if (isSupabaseActive) {
+      await supabase.from('faqs').delete().eq('id', id);
+    }
+    showToast('FAQ deleted');
+    logAction('Deleted FAQ', 'FAQs', `Deleted FAQ ${id}.`);
+  };
+
+  // Messages
+  const addMessage = (msg: Omit<ContactMessage, 'id' | 'createdAt' | 'read' | 'important'>) => {
+    const id = `msg-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const newMsg: ContactMessage = { ...msg, id, createdAt, read: false, important: false };
+    setMessages((prev) => [newMsg, ...prev]);
+
+    if (isSupabaseActive) {
+      supabase.from('messages').insert({
+        id: newMsg.id,
+        name: newMsg.name,
+        email: newMsg.email || null,
+        phone: newMsg.phone,
+        subject: newMsg.subject || null,
+        message: newMsg.message,
+        read: false,
+        important: false,
+        created_at: newMsg.createdAt
+      }).then(({ error }) => {
+        if (error) console.error('Failed to insert message into Supabase:', error);
+      });
+    }
+    showToast('Your message has been sent to hospital administration.');
+  };
+
+  const markMessageRead = async (id: string, read: boolean) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read } : m)));
+    if (isSupabaseActive) {
+      await supabase.from('messages').update({ read }).eq('id', id);
+    }
+  };
+
+  const toggleMessageImportant = async (id: string) => {
+    const msg = messages.find((m) => m.id === id);
+    if (!msg) return;
+    const important = !msg.important;
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, important } : m)));
+    if (isSupabaseActive) {
+      await supabase.from('messages').update({ important }).eq('id', id);
+    }
+  };
+
+  const deleteMessage = async (id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    if (isSupabaseActive) {
+      await supabase.from('messages').delete().eq('id', id);
+    }
+    showToast('Message deleted');
   };
 
   // Patients
   const addPatient = (pat: Omit<PatientRecord, 'id' | 'createdAt'>): string => {
     const id = `pat-${Date.now()}`;
-    const newPat: PatientRecord = { ...pat, id, createdAt: new Date().toISOString() };
-    const updated = [newPat, ...patients];
-    setPatients(updated);
-    saveStored('patients', updated);
-    syncToFirestore('patients', id, newPat);
-    logAction('Registered Patient', 'Patients', `Registered patient ${newPat.name} (${newPat.phone}).`);
-    showToast(`Patient ${newPat.name} registered!`);
+    const createdAt = new Date().toISOString();
+    const newPat = { ...pat, id, createdAt };
+    setPatients((prev) => [newPat, ...prev]);
+    showToast(`Patient ${pat.name} registered!`);
     return id;
   };
 
-  const updatePatient = (id: string, patData: Partial<PatientRecord>) => {
-    const updated = patients.map((p) => (p.id === id ? { ...p, ...patData } : p));
-    setPatients(updated);
-    saveStored('patients', updated);
-    syncToFirestore('patients', id, patData);
-    logAction('Updated Patient Record', 'Patients', `Updated record for patient ${id}.`);
-    showToast('Patient record updated!');
+  const updatePatient = (id: string, patUpdate: Partial<PatientRecord>) => {
+    setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, ...patUpdate } : p)));
+    showToast('Patient record updated');
   };
 
   // Lab Reports
   const addLabReport = (rep: Omit<LabReportRecord, 'id' | 'createdAt'>) => {
     const id = `rep-${Date.now()}`;
-    const newRep: LabReportRecord = { ...rep, id, createdAt: new Date().toISOString() };
-    const updated = [newRep, ...labReports];
-    setLabReports(updated);
-    saveStored('lab_reports', updated);
-    syncToFirestore('lab_reports', id, newRep);
-    logAction('Published Lab Report', 'Lab Reports', `Published report ${newRep.reportId} for ${newRep.patientName}.`);
-    showToast(`Lab Report ${newRep.reportId} published!`);
+    const createdAt = new Date().toISOString();
+    const newRep = { ...rep, id, createdAt };
+    setLabReports((prev) => [newRep, ...prev]);
+    showToast(`Lab report ${rep.reportId} uploaded!`);
   };
 
-  const updateLabReport = (id: string, repData: Partial<LabReportRecord>) => {
-    const updated = labReports.map((r) => (r.id === id ? { ...r, ...repData } : r));
-    setLabReports(updated);
-    saveStored('lab_reports', updated);
-    syncToFirestore('lab_reports', id, repData);
-    logAction('Updated Lab Report', 'Lab Reports', `Updated report ${id}.`);
-    showToast('Lab report updated!');
+  const updateLabReport = (id: string, repUpdate: Partial<LabReportRecord>) => {
+    setLabReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...repUpdate } : r)));
+    showToast('Lab report updated');
   };
 
   const deleteLabReport = (id: string) => {
-    const updated = labReports.filter((r) => r.id !== id);
-    setLabReports(updated);
-    saveStored('lab_reports', updated);
-    logAction('Deleted Lab Report', 'Lab Reports', `Deleted report ${id}.`);
-    showToast('Lab report deleted.', 'info');
+    setLabReports((prev) => prev.filter((r) => r.id !== id));
+    showToast('Lab report deleted');
   };
 
   const lookupLabReport = (reportId: string, phone: string): LabReportRecord | null => {
     const cleanPhone = phone.replace(/[\s-]/g, '');
-    const cleanReportId = reportId.trim().toUpperCase();
+    const cleanId = reportId.trim().toUpperCase();
     return (
       labReports.find(
         (r) =>
-          r.reportId.toUpperCase() === cleanReportId &&
-          r.patientPhone.replace(/[\s-]/g, '').includes(cleanPhone.slice(-7))
+          r.reportId.toUpperCase() === cleanId &&
+          r.patientPhone.replace(/[\s-]/g, '') === cleanPhone
       ) || null
     );
   };
@@ -600,137 +1345,305 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Invoices
   const addInvoice = (inv: Omit<InvoiceRecord, 'id' | 'createdAt'>) => {
     const id = `inv-${Date.now()}`;
-    const newInv: InvoiceRecord = { ...inv, id, createdAt: new Date().toISOString() };
-    const updated = [newInv, ...invoices];
-    setInvoices(updated);
-    saveStored('invoices', updated);
-    syncToFirestore('invoices', id, newInv);
-    logAction('Generated Invoice', 'Billing', `Invoice ${newInv.invoiceNumber} (Rs. ${newInv.totalPKR}) generated.`);
-    showToast(`Invoice ${newInv.invoiceNumber} created!`);
+    const createdAt = new Date().toISOString();
+    const newInv = { ...inv, id, createdAt };
+    setInvoices((prev) => [newInv, ...prev]);
+    showToast(`Invoice ${inv.invoiceNumber} generated!`);
   };
 
   const updateInvoiceStatus = (id: string, status: 'paid' | 'unpaid') => {
-    const updated = invoices.map((inv) => (inv.id === id ? { ...inv, status } : inv));
-    setInvoices(updated);
-    saveStored('invoices', updated);
-    syncToFirestore('invoices', id, { status });
-    logAction('Invoice Status Changed', 'Billing', `Invoice ${id} marked as ${status.toUpperCase()}.`);
-    showToast(`Invoice marked as ${status}.`);
-  };
-
-  // Messages
-  const addMessage = (msg: Omit<ContactMessage, 'id' | 'createdAt' | 'read' | 'important'>) => {
-    const id = `msg-${Date.now()}`;
-    const newMsg: ContactMessage = {
-      ...msg,
-      id,
-      read: false,
-      important: false,
-      createdAt: new Date().toISOString()
-    };
-    const updated = [newMsg, ...messages];
-    setMessages(updated);
-    saveStored('messages', updated);
-    syncToFirestore('messages', id, newMsg);
-    logAction('Inquiry Received', 'Messages', `Received message from ${newMsg.name}.`);
-  };
-
-  const markMessageRead = (id: string, read: boolean) => {
-    const updated = messages.map((m) => (m.id === id ? { ...m, read } : m));
-    setMessages(updated);
-    saveStored('messages', updated);
-  };
-
-  const toggleMessageImportant = (id: string) => {
-    const updated = messages.map((m) => (m.id === id ? { ...m, important: !m.important } : m));
-    setMessages(updated);
-    saveStored('messages', updated);
-  };
-
-  const deleteMessage = (id: string) => {
-    const updated = messages.filter((m) => m.id !== id);
-    setMessages(updated);
-    saveStored('messages', updated);
-    showToast('Message deleted.', 'info');
+    setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+    showToast(`Invoice marked as ${status}`);
   };
 
   // Staff Users
   const addStaffUser = (user: Omit<StaffUser, 'id' | 'createdAt'>) => {
     const id = `user-${Date.now()}`;
-    const newUser: StaffUser = { ...user, id, createdAt: new Date().toISOString() };
-    const updated = [...staffUsers, newUser];
-    setStaffUsers(updated);
-    saveStored('staff_users', updated);
-    syncToFirestore('users', id, newUser);
-    logAction('Created Staff Account', 'Users', `Created ${user.role} account for ${user.email}.`);
-    showToast(`Staff user ${user.name} created!`);
+    const createdAt = new Date().toISOString();
+    const newUser = { ...user, id, createdAt };
+    setStaffUsers((prev) => [...prev, newUser]);
+    showToast(`Staff account created for ${user.name}`);
   };
 
-  const updateStaffUser = (id: string, userData: Partial<StaffUser>) => {
-    const updated = staffUsers.map((u) => (u.id === id ? { ...u, ...userData } : u));
-    setStaffUsers(updated);
-    saveStored('staff_users', updated);
-    syncToFirestore('users', id, userData);
-    logAction('Updated Staff User', 'Users', `Updated account ID ${id}.`);
-    showToast('Staff user updated!');
+  const updateStaffUser = (id: string, userUpdate: Partial<StaffUser>) => {
+    setStaffUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...userUpdate } : u)));
+    showToast('Staff user updated');
   };
 
   const deleteStaffUser = (id: string) => {
-    const updated = staffUsers.filter((u) => u.id !== id);
-    setStaffUsers(updated);
-    saveStored('staff_users', updated);
-    logAction('Deleted Staff Account', 'Users', `Deleted user account ${id}.`);
-    showToast('Staff user deleted.', 'info');
+    setStaffUsers((prev) => prev.filter((u) => u.id !== id));
+    showToast('Staff user removed');
+  };
+
+  // ============================================================================
+  // ONE-TIME IMPORT LOCAL DATA TO SUPABASE CLOUD
+  // ============================================================================
+
+  const importLocalDataToSupabase = async (): Promise<{ success: boolean; count: number; error?: string }> => {
+    if (!isSupabaseActive) {
+      return { success: false, count: 0, error: 'Supabase credentials not configured in environment variables.' };
+    }
+
+    try {
+      setIsLoading(true);
+      let count = 0;
+
+      // 1. Hospital Settings
+      await supabase.from('hospital_settings').upsert({
+        id: 'main',
+        name: hospitalConfig.name,
+        name_urdu: hospitalConfig.nameUrdu,
+        tagline: hospitalConfig.tagline,
+        tagline_urdu: hospitalConfig.taglineUrdu,
+        logo: hospitalConfig.logo,
+        favicon: hospitalConfig.favicon,
+        short_desc: hospitalConfig.shortDesc,
+        short_desc_urdu: hospitalConfig.shortDescUrdu,
+        social_links: hospitalConfig.socialLinks,
+        contact: hospitalConfig.contact,
+        updated_at: new Date().toISOString()
+      });
+      count++;
+
+      // 2. Operational Settings
+      await supabase.from('operational_settings').upsert({
+        id: 'main',
+        slot_duration_minutes: settings.slotDurationMinutes,
+        working_days: settings.workingDays,
+        opd_open_time: settings.opdOpenTime,
+        opd_close_time: settings.opdCloseTime,
+        emergency_active: settings.emergencyActive,
+        maintenance_mode: settings.maintenanceMode,
+        email_notifications: settings.emailNotifications,
+        sms_notifications: settings.smsNotifications,
+        whatsapp_confirmation: settings.whatsappConfirmation,
+        currency: settings.currency,
+        updated_at: new Date().toISOString()
+      });
+      count++;
+
+      // 3. Homepage Settings
+      await supabase.from('homepage_settings').upsert({
+        id: 'main',
+        hero_heading: homepageSettings.heroHeading,
+        hero_subheading: homepageSettings.heroSubheading,
+        hero_button_text: homepageSettings.heroButtonText,
+        hero_slider_images: homepageSettings.heroSliderImages,
+        about_badge: homepageSettings.aboutBadge,
+        about_heading: homepageSettings.aboutHeading,
+        about_subheading: homepageSettings.aboutSubheading,
+        about_mission: homepageSettings.aboutMission,
+        about_vision: homepageSettings.aboutVision,
+        about_image: homepageSettings.aboutImage,
+        sections_visibility: homepageSettings.sectionsVisibility,
+        updated_at: new Date().toISOString()
+      });
+      count++;
+
+      // 4. Departments
+      for (const d of departments) {
+        await supabase.from('departments').upsert({
+          id: d.id,
+          title: d.title,
+          title_urdu: d.titleUrdu,
+          icon_name: d.iconName,
+          description: d.description,
+          description_urdu: d.descriptionUrdu,
+          full_description: d.fullDescription || null,
+          image: d.image || null,
+          display_order: d.order || 0,
+          features: d.features,
+          features_urdu: d.featuresUrdu,
+          head_doctor: d.headDoctor
+        });
+        count++;
+      }
+
+      // 5. Doctors
+      for (const doc of doctors) {
+        await supabase.from('doctors').upsert({
+          id: doc.id,
+          name: doc.name,
+          name_urdu: doc.nameUrdu,
+          department_id: doc.departmentId,
+          specialty: doc.specialty,
+          specialty_urdu: doc.specialtyUrdu,
+          qualification: doc.qualification,
+          experience: doc.experience,
+          opd_timings: doc.opdTimings,
+          opd_timings_urdu: doc.opdTimingsUrdu,
+          days: doc.days,
+          days_urdu: doc.daysUrdu,
+          fee_pkr: doc.feePKR,
+          image: doc.image,
+          about: doc.about,
+          about_urdu: doc.aboutUrdu,
+          pmdc_no: doc.pmdcNo,
+          active: doc.active ?? true
+        });
+        count++;
+      }
+
+      // 6. Appointments
+      for (const a of appointments) {
+        await supabase.from('appointments').upsert({
+          id: a.id,
+          token: a.token,
+          patient_name: a.patientName,
+          phone: a.phone,
+          cnic: a.cnic || null,
+          department_id: a.departmentId,
+          doctor_id: a.doctorId || null,
+          appointment_date: a.appointmentDate,
+          time_slot: a.timeSlot,
+          patient_type: a.patientType,
+          notes: a.notes || null,
+          status: a.status,
+          created_at: a.createdAt
+        });
+        count++;
+      }
+
+      // 7. Services
+      for (const s of services) {
+        await supabase.from('services').upsert({
+          id: s.id,
+          title: s.title,
+          title_urdu: s.titleUrdu,
+          icon_name: s.iconName,
+          description: s.description,
+          description_urdu: s.descriptionUrdu,
+          badge: s.badge || null,
+          badge_urdu: s.badgeUrdu || null,
+          image: s.image
+        });
+        count++;
+      }
+
+      // 8. Packages
+      for (const p of packages) {
+        await supabase.from('packages').upsert({
+          id: p.id,
+          title: p.title,
+          title_urdu: p.titleUrdu,
+          original_price: p.originalPrice,
+          discounted_price: p.discountedPrice,
+          popular: p.popular ?? false,
+          category: p.category,
+          category_urdu: p.categoryUrdu,
+          fasting_required: p.fastingRequired,
+          fasting_required_urdu: p.fastingRequiredUrdu,
+          report_time: p.reportTime,
+          report_time_urdu: p.reportTimeUrdu,
+          tests_included: p.testsIncluded,
+          tests_included_urdu: p.testsIncludedUrdu
+        });
+        count++;
+      }
+
+      // 9. Gallery
+      for (const g of gallery) {
+        await supabase.from('gallery').upsert({
+          id: g.id,
+          title: g.title,
+          title_urdu: g.titleUrdu,
+          category: g.category,
+          category_label: g.categoryLabel,
+          category_label_urdu: g.categoryLabelUrdu,
+          image: g.image,
+          description: g.description,
+          description_urdu: g.descriptionUrdu
+        });
+        count++;
+      }
+
+      // 10. Testimonials
+      for (const t of testimonials) {
+        await supabase.from('testimonials').upsert({
+          id: t.id,
+          name: t.name,
+          name_urdu: t.nameUrdu,
+          city: t.city,
+          city_urdu: t.cityUrdu,
+          rating: t.rating,
+          department: t.department,
+          department_urdu: t.departmentUrdu,
+          comment: t.comment,
+          comment_urdu: t.commentUrdu,
+          date: t.date,
+          avatar: t.avatar
+        });
+        count++;
+      }
+
+      // 11. FAQs
+      for (const f of faqs) {
+        await supabase.from('faqs').upsert({
+          id: f.id,
+          question: f.question,
+          question_urdu: f.questionUrdu,
+          answer: f.answer,
+          answer_urdu: f.answerUrdu,
+          category: f.category
+        });
+        count++;
+      }
+
+      showToast(`Successfully uploaded ${count} records to Supabase Cloud!`, 'success');
+      return { success: true, count };
+    } catch (err: any) {
+      console.error('Import error:', err);
+      showToast(`Import error: ${err?.message || 'Check database tables and permissions'}`, 'error');
+      return { success: false, count: 0, error: err?.message };
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Backup & Restore
   const exportAllDataJSON = (): string => {
-    const fullBackup = {
-      hospitalConfig,
-      settings,
-      homepageSettings,
-      appointments,
-      doctors,
-      departments,
-      packages,
-      services,
-      gallery,
-      testimonials,
-      faqs,
-      patients,
-      labReports,
-      invoices,
-      messages,
-      staffUsers,
-      activityLogs,
-      exportedAt: new Date().toISOString()
-    };
-    return JSON.stringify(fullBackup, null, 2);
+    return JSON.stringify(
+      {
+        hospitalConfig,
+        settings,
+        homepageSettings,
+        departments,
+        doctors,
+        appointments,
+        services,
+        packages,
+        gallery,
+        testimonials,
+        faqs,
+        patients,
+        labReports,
+        invoices,
+        messages,
+        exportedAt: new Date().toISOString()
+      },
+      null,
+      2
+    );
   };
 
   const restoreFromJSON = (jsonData: string): boolean => {
     try {
-      const parsed = JSON.parse(jsonData);
-      if (parsed.hospitalConfig) setHospitalConfig(parsed.hospitalConfig);
-      if (parsed.settings) setSettings(parsed.settings);
-      if (parsed.homepageSettings) setHomepageSettings(parsed.homepageSettings);
-      if (parsed.appointments) setAppointments(parsed.appointments);
-      if (parsed.doctors) setDoctors(parsed.doctors);
-      if (parsed.departments) setDepartments(parsed.departments);
-      if (parsed.packages) setPackages(parsed.packages);
-      if (parsed.services) setServices(parsed.services);
-      if (parsed.gallery) setGallery(parsed.gallery);
-      if (parsed.testimonials) setTestimonials(parsed.testimonials);
-      if (parsed.faqs) setFaqs(parsed.faqs);
-      if (parsed.patients) setPatients(parsed.patients);
-      if (parsed.labReports) setLabReports(parsed.labReports);
-      if (parsed.invoices) setInvoices(parsed.invoices);
-      if (parsed.messages) setMessages(parsed.messages);
-      logAction('Restored Data from Backup', 'Settings', 'Database restored from imported JSON file.');
-      showToast('Database successfully restored from JSON backup!');
+      const data = JSON.parse(jsonData);
+      if (data.hospitalConfig) setHospitalConfig(data.hospitalConfig);
+      if (data.settings) setSettings(data.settings);
+      if (data.homepageSettings) setHomepageSettings(data.homepageSettings);
+      if (data.departments) setDepartments(data.departments);
+      if (data.doctors) setDoctors(data.doctors);
+      if (data.appointments) setAppointments(data.appointments);
+      if (data.services) setServices(data.services);
+      if (data.packages) setPackages(data.packages);
+      if (data.gallery) setGallery(data.gallery);
+      if (data.testimonials) setTestimonials(data.testimonials);
+      if (data.faqs) setFaqs(data.faqs);
+      showToast('All hospital data restored successfully!');
       return true;
     } catch {
-      showToast('Invalid backup JSON file.', 'error');
+      showToast('Invalid backup JSON file', 'error');
       return false;
     }
   };
@@ -738,6 +1651,10 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   return (
     <AdminDataContext.Provider
       value={{
+        isLoading,
+        isSupabaseActive,
+        refetchData: fetchSupabaseData,
+        importLocalDataToSupabase,
         hospitalConfig,
         updateHospitalConfig,
         settings,

@@ -18,14 +18,11 @@ import {
   Menu,
   X,
   Bell,
-  Search,
   Globe,
   LogOut,
   ChevronDown,
   ExternalLink,
-  Clock,
-  CheckCircle2,
-  AlertTriangle
+  Clock
 } from 'lucide-react';
 import { StaffRole } from '../types';
 
@@ -46,7 +43,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onToggleLang,
   children
 }) => {
-  const { currentUser, logout, canAccess, switchRole, inactivityRemainingSeconds } = useAdminAuth();
+  const { currentUser, logout, canAccess, inactivityRemainingSeconds } = useAdminAuth();
   const { appointments, messages, labReports } = useAdminData();
   const isUrdu = lang === 'ur';
 
@@ -54,7 +51,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [globalSearch, setGlobalSearch] = useState('');
 
   // Unread / pending badges
   const pendingAppointmentsCount = appointments.filter((a) => a.status === 'pending').length;
@@ -85,6 +81,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     receptionist: 'Receptionist',
     doctor: 'Consultant Doctor',
     lab_staff: 'Lab Technologist'
+  };
+
+  const handleLogout = async () => {
+    setShowProfileMenu(false);
+    await logout();
   };
 
   return (
@@ -181,7 +182,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
           <button
             type="button"
-            onClick={logout}
+            onClick={handleLogout}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer ${
               sidebarCollapsed ? 'justify-center' : ''
             }`}
@@ -250,7 +251,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               </button>
               <button
                 type="button"
-                onClick={logout}
+                onClick={handleLogout}
                 className="w-full py-2 px-3 rounded-lg bg-red-950/60 text-red-400 text-xs font-semibold flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
@@ -286,7 +287,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             </div>
           </div>
 
-          {/* Right Controls: Search, Lang, Notifications, Profile */}
+          {/* Right Controls: Search, Lang, Notifications, Header Logout Button, Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
             
             {/* Language toggle */}
@@ -366,6 +367,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               )}
             </div>
 
+            {/* Prominent Header Logout Button */}
+            <button
+              onClick={handleLogout}
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-[#D62828] border border-red-200 text-xs font-bold transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+              title={isUrdu ? 'پورٹل سے لاگ آؤٹ کریں' : 'Sign Out of Admin Portal'}
+            >
+              <LogOut className="w-3.5 h-3.5 text-[#D62828]" />
+              <span className="hidden xs:inline">{isUrdu ? 'لاگ آؤٹ' : 'Logout'}</span>
+            </button>
+
             {/* User Profile Dropdown */}
             <div className="relative">
               <button
@@ -387,40 +399,28 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                     <div className="font-bold text-sm text-slate-900 truncate">{currentUser?.name}</div>
                     <div className="text-xs text-slate-500 truncate">{currentUser?.email}</div>
                     <div className="mt-1.5 inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-[#1E5AA8] text-white">
-                      {currentUser?.role ? roleDisplayNames[currentUser.role] : 'Staff'}
+                      {currentUser?.role ? roleDisplayNames[currentUser.role] : 'Administrator'}
                     </div>
                   </div>
 
-                  {/* Switch Role Fast Tester */}
-                  <div className="py-2 border-b border-slate-100">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1">
-                      Switch Role (Testing)
-                    </div>
-                    {(['super_admin', 'receptionist', 'doctor', 'lab_staff'] as StaffRole[]).map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => {
-                          switchRole(r);
-                          setShowProfileMenu(false);
-                        }}
-                        className={`w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
-                          currentUser?.role === r ? 'bg-blue-50 text-[#1E5AA8] font-bold' : 'text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>{roleDisplayNames[r]}</span>
-                        {currentUser?.role === r && <CheckCircle2 className="w-3 h-3 text-[#1E5AA8]" />}
-                      </button>
-                    ))}
+                  <div className="py-2 border-b border-slate-100 space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectModule('settings');
+                        setShowProfileMenu(false);
+                      }}
+                      className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{isUrdu ? 'سسٹم سیٹنگز' : 'Settings & Password'}</span>
+                    </button>
                   </div>
 
                   <div className="pt-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        logout();
-                        setShowProfileMenu(false);
-                      }}
+                      onClick={handleLogout}
                       className="w-full flex items-center gap-2 p-2 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
                     >
                       <LogOut className="w-3.5 h-3.5" />
@@ -434,13 +434,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </div>
         </header>
 
-        {/* Inactivity warning banner if near expiration (< 2 minutes) */}
-        {inactivityRemainingSeconds < 120 && (
+        {/* Inactivity warning banner if near expiration (< 5 minutes) */}
+        {inactivityRemainingSeconds < 300 && (
           <div className="bg-amber-500 text-white px-4 py-2 text-xs flex items-center justify-between animate-pulse">
             <div className="flex items-center gap-2 font-medium">
               <Clock className="w-4 h-4" />
               <span>
-                Session expiring in {inactivityRemainingSeconds}s due to inactivity. Move mouse to stay logged in.
+                Session will expire in {Math.floor(inactivityRemainingSeconds / 60)}m {inactivityRemainingSeconds % 60}s due to inactivity. Move mouse or click to stay logged in.
               </span>
             </div>
           </div>
