@@ -13,7 +13,7 @@ import {
   CalendarDays,
   FileText
 } from 'lucide-react';
-import { DEPARTMENTS, DOCTORS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { formatWhatsAppLink } from '../utils/phoneUtils';
 
@@ -38,8 +38,8 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   const isUrdu = lang === 'ur';
   const { addAppointment, departments: liveDepts, doctors: liveDocs, hospitalConfig } = useAdminData();
 
-  const deptsList = liveDepts && liveDepts.length > 0 ? liveDepts : DEPARTMENTS;
-  const docsList = liveDocs && liveDocs.length > 0 ? liveDocs : DOCTORS;
+  const deptsList = liveDepts || [];
+  const docsList = liveDocs || [];
 
   // Form states
   const [patientName, setPatientName] = useState(prefillName);

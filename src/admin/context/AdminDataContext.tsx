@@ -204,14 +204,14 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [hospitalConfig, setHospitalConfig] = useState(INITIAL_CONFIG);
   const [settings, setSettings] = useState(INITIAL_HOSPITAL_SETTINGS);
   const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(INITIAL_HOMEPAGE_SETTINGS);
-  const [appointments, setAppointments] = useState<AdminAppointment[]>(INITIAL_APPOINTMENTS);
-  const [doctors, setDoctors] = useState<Doctor[]>(INITIAL_DOCTORS);
-  const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
-  const [packages, setPackages] = useState<HealthPackage[]>(INITIAL_PACKAGES);
-  const [services, setServices] = useState<ServiceFacility[]>(INITIAL_SERVICES);
-  const [gallery, setGallery] = useState<GalleryItem[]>(INITIAL_GALLERY);
-  const [testimonials, setTestimonials] = useState<Testimonial[]>(INITIAL_TESTIMONIALS);
-  const [faqs, setFaqs] = useState<FAQItem[]>(INITIAL_FAQS);
+  const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [packages, setPackages] = useState<HealthPackage[]>([]);
+  const [services, setServices] = useState<ServiceFacility[]>([]);
+  const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [faqs, setFaqs] = useState<FAQItem[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>(INITIAL_PATIENTS);
   const [labReports, setLabReports] = useState<LabReportRecord[]>(INITIAL_LAB_REPORTS);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>(INITIAL_INVOICES);
@@ -419,7 +419,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 4. Departments
       const { data: deptsData } = await supabase.from('departments').select('*').order('display_order', { ascending: true });
-      if (deptsData && deptsData.length > 0) {
+      if (deptsData) {
         setDepartments(
           deptsData.map((d: any) => ({
             id: d.id,
@@ -440,7 +440,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 5. Doctors
       const { data: docsData } = await supabase.from('doctors').select('*').order('name', { ascending: true });
-      if (docsData && docsData.length > 0) {
+      if (docsData) {
         setDoctors(
           docsData.map((d: any) => ({
             id: d.id,
@@ -467,7 +467,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 6. Appointments
       const { data: apptsData } = await supabase.from('appointments').select('*').order('created_at', { ascending: false });
-      if (apptsData && apptsData.length > 0) {
+      if (apptsData) {
         setAppointments(
           apptsData.map((a: any) => ({
             id: a.id,
@@ -489,7 +489,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 7. Services
       const { data: srvData } = await supabase.from('services').select('*');
-      if (srvData && srvData.length > 0) {
+      if (srvData) {
         setServices(
           srvData.map((s: any) => ({
             id: s.id,
@@ -507,7 +507,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 8. Packages
       const { data: pkgData } = await supabase.from('packages').select('*');
-      if (pkgData && pkgData.length > 0) {
+      if (pkgData) {
         setPackages(
           pkgData.map((p: any) => ({
             id: p.id,
@@ -530,7 +530,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 9. Gallery
       const { data: galData } = await supabase.from('gallery').select('*');
-      if (galData && galData.length > 0) {
+      if (galData) {
         setGallery(
           galData.map((g: any) => ({
             id: g.id,
@@ -548,7 +548,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 10. Testimonials
       const { data: testData } = await supabase.from('testimonials').select('*');
-      if (testData && testData.length > 0) {
+      if (testData) {
         setTestimonials(
           testData.map((t: any) => ({
             id: t.id,
@@ -569,7 +569,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 11. FAQs
       const { data: faqsData } = await supabase.from('faqs').select('*');
-      if (faqsData && faqsData.length > 0) {
+      if (faqsData) {
         setFaqs(
           faqsData.map((f: any) => ({
             id: f.id,
@@ -915,34 +915,36 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status } : a))
-    );
-
     if (isSupabaseActive) {
       try {
         const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
         if (error) throw error;
+        await fetchSupabaseData();
       } catch (err: any) {
         showToast(`Status update failed: ${err?.message}`, 'error');
         return;
       }
+    } else {
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status } : a))
+      );
     }
     showToast(`Appointment status updated to ${status}`);
     logAction('Updated Appointment Status', 'Appointments', `Appointment ${id} changed to ${status}.`);
   };
 
   const deleteAppointment = async (id: string) => {
-    setAppointments((prev) => prev.filter((a) => a.id !== id));
-
     if (isSupabaseActive) {
       try {
         const { error } = await supabase.from('appointments').delete().eq('id', id);
         if (error) throw error;
+        await fetchSupabaseData();
       } catch (err: any) {
         showToast(`Delete failed: ${err?.message}`, 'error');
         return;
       }
+    } else {
+      setAppointments((prev) => prev.filter((a) => a.id !== id));
     }
     showToast('Appointment removed successfully');
     logAction('Deleted Appointment', 'Appointments', `Deleted appointment record ${id}.`);
@@ -952,7 +954,6 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addDoctor = async (doc: Omit<Doctor, 'id'>) => {
     const id = `doc-${Date.now()}`;
     const newDoc: Doctor = { ...doc, id };
-    setDoctors((prev) => [...prev, newDoc]);
 
     if (isSupabaseActive) {
       try {
@@ -977,12 +978,14 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           active: newDoc.active ?? true
         });
         if (error) throw error;
+        await fetchSupabaseData();
         showToast(`Doctor ${newDoc.name} added permanently to Supabase!`);
       } catch (err: any) {
         showToast(`Failed to add doctor: ${err?.message}`, 'error');
         return;
       }
     } else {
+      setDoctors((prev) => [...prev, newDoc]);
       showToast(`Doctor ${newDoc.name} added!`);
     }
 
@@ -990,10 +993,6 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateDoctor = async (id: string, docUpdate: Partial<Doctor>) => {
-    setDoctors((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, ...docUpdate } : d))
-    );
-
     if (isSupabaseActive) {
       try {
         const dbPayload: any = { updated_at: new Date().toISOString() };
@@ -1017,12 +1016,16 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const { error } = await supabase.from('doctors').update(dbPayload).eq('id', id);
         if (error) throw error;
+        await fetchSupabaseData();
         showToast('Doctor details updated in Supabase!');
       } catch (err: any) {
         showToast(`Update failed: ${err?.message}`, 'error');
         return;
       }
     } else {
+      setDoctors((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, ...docUpdate } : d))
+      );
       showToast('Doctor details updated!');
     }
 
@@ -1030,18 +1033,18 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const deleteDoctor = async (id: string) => {
-    setDoctors((prev) => prev.filter((d) => d.id !== id));
-
     if (isSupabaseActive) {
       try {
         const { error } = await supabase.from('doctors').delete().eq('id', id);
         if (error) throw error;
+        await fetchSupabaseData();
         showToast('Doctor deleted from Supabase!');
       } catch (err: any) {
         showToast(`Delete failed: ${err?.message}`, 'error');
         return;
       }
     } else {
+      setDoctors((prev) => prev.filter((d) => d.id !== id));
       showToast('Doctor removed successfully');
     }
 
@@ -1059,7 +1062,6 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addDepartment = async (dept: Omit<Department, 'id'>) => {
     const id = `dept-${Date.now()}`;
     const newDept: Department = { ...dept, id };
-    setDepartments((prev) => [...prev, newDept]);
 
     if (isSupabaseActive) {
       try {
@@ -1078,12 +1080,14 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           head_doctor: newDept.headDoctor || ''
         });
         if (error) throw error;
+        await fetchSupabaseData();
         showToast(`Department ${newDept.title} added to Supabase!`);
       } catch (err: any) {
         showToast(`Add department failed: ${err?.message}`, 'error');
         return;
       }
     } else {
+      setDepartments((prev) => [...prev, newDept]);
       showToast(`Department ${newDept.title} added!`);
     }
 
@@ -1091,10 +1095,6 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateDepartment = async (id: string, deptUpdate: Partial<Department>) => {
-    setDepartments((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, ...deptUpdate } : d))
-    );
-
     if (isSupabaseActive) {
       try {
         const payload: any = { updated_at: new Date().toISOString() };
@@ -1112,12 +1112,16 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const { error } = await supabase.from('departments').update(payload).eq('id', id);
         if (error) throw error;
+        await fetchSupabaseData();
         showToast('Department updated in Supabase!');
       } catch (err: any) {
         showToast(`Update department failed: ${err?.message}`, 'error');
         return;
       }
     } else {
+      setDepartments((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, ...deptUpdate } : d))
+      );
       showToast('Department updated!');
     }
 
@@ -1125,18 +1129,18 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const deleteDepartment = async (id: string) => {
-    setDepartments((prev) => prev.filter((d) => d.id !== id));
-
     if (isSupabaseActive) {
       try {
         const { error } = await supabase.from('departments').delete().eq('id', id);
         if (error) throw error;
+        await fetchSupabaseData();
         showToast('Department deleted from Supabase!');
       } catch (err: any) {
         showToast(`Delete department failed: ${err?.message}`, 'error');
         return;
       }
     } else {
+      setDepartments((prev) => prev.filter((d) => d.id !== id));
       showToast('Department removed successfully');
     }
 
@@ -1145,19 +1149,21 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const reorderDepartments = async (newOrder: Department[]) => {
     const updated = newOrder.map((dept, index) => ({ ...dept, order: index + 1 }));
-    setDepartments(updated);
 
     if (isSupabaseActive) {
       try {
         for (const dept of updated) {
-          await supabase.from('departments').update({ display_order: dept.order }).eq('id', dept.id);
+          const { error } = await supabase.from('departments').update({ display_order: dept.order }).eq('id', dept.id);
+          if (error) throw error;
         }
+        await fetchSupabaseData();
         showToast('Department order updated in Supabase!');
       } catch (err: any) {
         showToast(`Reorder failed: ${err?.message}`, 'error');
         return;
       }
     } else {
+      setDepartments(updated);
       showToast('Department display order updated!');
     }
 
@@ -1168,11 +1174,10 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addService = async (srv: Omit<ServiceFacility, 'id'>) => {
     const id = `srv-${Date.now()}`;
     const newSrv = { ...srv, id };
-    setServices((prev) => [...prev, newSrv]);
 
     if (isSupabaseActive) {
       try {
-        await supabase.from('services').insert({
+        const { error } = await supabase.from('services').insert({
           id: newSrv.id,
           title: newSrv.title,
           title_urdu: newSrv.titleUrdu,
@@ -1183,17 +1188,22 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           badge_urdu: newSrv.badgeUrdu,
           image: newSrv.image
         });
-      } catch (err) {
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast(`Service "${newSrv.title}" added to Supabase!`);
+      } catch (err: any) {
         console.error('Failed to insert service into Supabase:', err);
+        showToast(`Failed to add service: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setServices((prev) => [...prev, newSrv]);
+      showToast(`Service "${newSrv.title}" added!`);
     }
-    showToast(`Service "${newSrv.title}" added successfully!`);
     logAction('Added Service', 'Services', `Added service ${srv.title}.`);
   };
 
   const updateService = async (id: string, srvUpdate: Partial<ServiceFacility>) => {
-    setServices((prev) => prev.map((s) => (s.id === id ? { ...s, ...srvUpdate } : s)));
-
     if (isSupabaseActive) {
       try {
         const payload: any = { updated_at: new Date().toISOString() };
@@ -1206,21 +1216,37 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (srvUpdate.badgeUrdu !== undefined) payload.badge_urdu = srvUpdate.badgeUrdu;
         if (srvUpdate.image !== undefined) payload.image = srvUpdate.image;
 
-        await supabase.from('services').update(payload).eq('id', id);
-      } catch (err) {
+        const { error } = await supabase.from('services').update(payload).eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Service details updated in Supabase!');
+      } catch (err: any) {
         console.error('Failed to update service in Supabase:', err);
+        showToast(`Update service failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setServices((prev) => prev.map((s) => (s.id === id ? { ...s, ...srvUpdate } : s)));
+      showToast('Service details updated!');
     }
-    showToast('Service details updated!');
     logAction('Updated Service', 'Services', `Updated service ${id}.`);
   };
 
   const deleteService = async (id: string) => {
-    setServices((prev) => prev.filter((s) => s.id !== id));
     if (isSupabaseActive) {
-      await supabase.from('services').delete().eq('id', id);
+      try {
+        const { error } = await supabase.from('services').delete().eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Service removed from Supabase');
+      } catch (err: any) {
+        showToast(`Delete service failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      showToast('Service removed successfully');
     }
-    showToast('Service removed successfully');
     logAction('Deleted Service', 'Services', `Deleted service ${id}.`);
   };
 
@@ -1228,11 +1254,10 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addPackage = async (pkg: Omit<HealthPackage, 'id'>) => {
     const id = `pkg-${Date.now()}`;
     const newPkg = { ...pkg, id };
-    setPackages((prev) => [...prev, newPkg]);
 
     if (isSupabaseActive) {
       try {
-        await supabase.from('packages').insert({
+        const { error } = await supabase.from('packages').insert({
           id: newPkg.id,
           title: newPkg.title,
           title_urdu: newPkg.titleUrdu,
@@ -1248,17 +1273,22 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           tests_included: newPkg.testsIncluded,
           tests_included_urdu: newPkg.testsIncludedUrdu
         });
-      } catch (err) {
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast(`Package "${newPkg.title}" created in Supabase!`);
+      } catch (err: any) {
         console.error('Failed to add package to Supabase:', err);
+        showToast(`Add package failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setPackages((prev) => [...prev, newPkg]);
+      showToast(`Package "${newPkg.title}" created!`);
     }
-    showToast(`Package "${newPkg.title}" created!`);
     logAction('Added Package', 'Packages', `Added package ${pkg.title}.`);
   };
 
   const updatePackage = async (id: string, pkgUpdate: Partial<HealthPackage>) => {
-    setPackages((prev) => prev.map((p) => (p.id === id ? { ...p, ...pkgUpdate } : p)));
-
     if (isSupabaseActive) {
       try {
         const payload: any = { updated_at: new Date().toISOString() };
@@ -1276,21 +1306,37 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (pkgUpdate.testsIncluded !== undefined) payload.tests_included = pkgUpdate.testsIncluded;
         if (pkgUpdate.testsIncludedUrdu !== undefined) payload.tests_included_urdu = pkgUpdate.testsIncludedUrdu;
 
-        await supabase.from('packages').update(payload).eq('id', id);
-      } catch (err) {
+        const { error } = await supabase.from('packages').update(payload).eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Package updated in Supabase!');
+      } catch (err: any) {
         console.error('Failed to update package in Supabase:', err);
+        showToast(`Update package failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setPackages((prev) => prev.map((p) => (p.id === id ? { ...p, ...pkgUpdate } : p)));
+      showToast('Package updated!');
     }
-    showToast('Package updated!');
     logAction('Updated Package', 'Packages', `Updated package ${id}.`);
   };
 
   const deletePackage = async (id: string) => {
-    setPackages((prev) => prev.filter((p) => p.id !== id));
     if (isSupabaseActive) {
-      await supabase.from('packages').delete().eq('id', id);
+      try {
+        const { error } = await supabase.from('packages').delete().eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Package deleted from Supabase');
+      } catch (err: any) {
+        showToast(`Delete package failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      setPackages((prev) => prev.filter((p) => p.id !== id));
+      showToast('Package deleted');
     }
-    showToast('Package deleted');
     logAction('Deleted Package', 'Packages', `Deleted package ${id}.`);
   };
 
@@ -1298,11 +1344,10 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addGalleryItem = async (item: Omit<GalleryItem, 'id'>) => {
     const id = `gal-${Date.now()}`;
     const newItem = { ...item, id };
-    setGallery((prev) => [newItem, ...prev]);
 
     if (isSupabaseActive) {
       try {
-        await supabase.from('gallery').insert({
+        const { error } = await supabase.from('gallery').insert({
           id: newItem.id,
           title: newItem.title,
           title_urdu: newItem.titleUrdu,
@@ -1313,20 +1358,36 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           description: newItem.description,
           description_urdu: newItem.descriptionUrdu
         });
-      } catch (err) {
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Gallery image added to Supabase!');
+      } catch (err: any) {
         console.error('Failed to add gallery item to Supabase:', err);
+        showToast(`Add gallery item failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setGallery((prev) => [newItem, ...prev]);
+      showToast('Gallery image added!');
     }
-    showToast('Gallery image added!');
     logAction('Added Gallery Image', 'Gallery', `Uploaded image ${item.title}.`);
   };
 
   const deleteGalleryItem = async (id: string) => {
-    setGallery((prev) => prev.filter((g) => g.id !== id));
     if (isSupabaseActive) {
-      await supabase.from('gallery').delete().eq('id', id);
+      try {
+        const { error } = await supabase.from('gallery').delete().eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Gallery item removed from Supabase');
+      } catch (err: any) {
+        showToast(`Delete gallery item failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      setGallery((prev) => prev.filter((g) => g.id !== id));
+      showToast('Gallery item removed');
     }
-    showToast('Gallery item removed');
     logAction('Deleted Gallery Image', 'Gallery', `Removed gallery image ${id}.`);
   };
 
@@ -1334,11 +1395,10 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addTestimonial = async (item: Omit<Testimonial, 'id'>) => {
     const id = `test-${Date.now()}`;
     const newItem = { ...item, id };
-    setTestimonials((prev) => [newItem, ...prev]);
 
     if (isSupabaseActive) {
       try {
-        await supabase.from('testimonials').insert({
+        const { error } = await supabase.from('testimonials').insert({
           id: newItem.id,
           name: newItem.name,
           name_urdu: newItem.nameUrdu,
@@ -1352,17 +1412,22 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           date: newItem.date,
           avatar: newItem.avatar
         });
-      } catch (err) {
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Testimonial published to Supabase!');
+      } catch (err: any) {
         console.error('Failed to add testimonial to Supabase:', err);
+        showToast(`Add testimonial failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setTestimonials((prev) => [newItem, ...prev]);
+      showToast('Testimonial published!');
     }
-    showToast('Testimonial published!');
     logAction('Added Testimonial', 'Testimonials', `Added testimonial by ${item.name}.`);
   };
 
   const updateTestimonial = async (id: string, itemUpdate: Partial<Testimonial>) => {
-    setTestimonials((prev) => prev.map((t) => (t.id === id ? { ...t, ...itemUpdate } : t)));
-
     if (isSupabaseActive) {
       try {
         const payload: any = {};
@@ -1377,20 +1442,36 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (itemUpdate.commentUrdu !== undefined) payload.comment_urdu = itemUpdate.commentUrdu;
         if (itemUpdate.avatar !== undefined) payload.avatar = itemUpdate.avatar;
 
-        await supabase.from('testimonials').update(payload).eq('id', id);
-      } catch (err) {
+        const { error } = await supabase.from('testimonials').update(payload).eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Testimonial updated in Supabase!');
+      } catch (err: any) {
         console.error('Failed to update testimonial in Supabase:', err);
+        showToast(`Update testimonial failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setTestimonials((prev) => prev.map((t) => (t.id === id ? { ...t, ...itemUpdate } : t)));
+      showToast('Testimonial updated!');
     }
-    showToast('Testimonial updated!');
   };
 
   const deleteTestimonial = async (id: string) => {
-    setTestimonials((prev) => prev.filter((t) => t.id !== id));
     if (isSupabaseActive) {
-      await supabase.from('testimonials').delete().eq('id', id);
+      try {
+        const { error } = await supabase.from('testimonials').delete().eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('Testimonial deleted from Supabase');
+      } catch (err: any) {
+        showToast(`Delete testimonial failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      setTestimonials((prev) => prev.filter((t) => t.id !== id));
+      showToast('Testimonial deleted');
     }
-    showToast('Testimonial deleted');
     logAction('Deleted Testimonial', 'Testimonials', `Removed testimonial ${id}.`);
   };
 
@@ -1398,11 +1479,10 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addFaq = async (item: Omit<FAQItem, 'id'>) => {
     const id = `faq-${Date.now()}`;
     const newFaq = { ...item, id };
-    setFaqs((prev) => [...prev, newFaq]);
 
     if (isSupabaseActive) {
       try {
-        await supabase.from('faqs').insert({
+        const { error } = await supabase.from('faqs').insert({
           id: newFaq.id,
           question: newFaq.question,
           question_urdu: newFaq.questionUrdu,
@@ -1410,17 +1490,22 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           answer_urdu: newFaq.answerUrdu,
           category: newFaq.category
         });
-      } catch (err) {
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('FAQ created in Supabase!');
+      } catch (err: any) {
         console.error('Failed to add FAQ to Supabase:', err);
+        showToast(`Add FAQ failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setFaqs((prev) => [...prev, newFaq]);
+      showToast('FAQ created!');
     }
-    showToast('FAQ created!');
     logAction('Added FAQ', 'FAQs', `Added FAQ "${item.question.slice(0, 30)}...".`);
   };
 
   const updateFaq = async (id: string, itemUpdate: Partial<FAQItem>) => {
-    setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, ...itemUpdate } : f)));
-
     if (isSupabaseActive) {
       try {
         const payload: any = {};
@@ -1430,20 +1515,36 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (itemUpdate.answerUrdu !== undefined) payload.answer_urdu = itemUpdate.answerUrdu;
         if (itemUpdate.category !== undefined) payload.category = itemUpdate.category;
 
-        await supabase.from('faqs').update(payload).eq('id', id);
-      } catch (err) {
+        const { error } = await supabase.from('faqs').update(payload).eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('FAQ updated in Supabase!');
+      } catch (err: any) {
         console.error('Failed to update FAQ in Supabase:', err);
+        showToast(`Update FAQ failed: ${err?.message}`, 'error');
+        return;
       }
+    } else {
+      setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, ...itemUpdate } : f)));
+      showToast('FAQ updated!');
     }
-    showToast('FAQ updated!');
   };
 
   const deleteFaq = async (id: string) => {
-    setFaqs((prev) => prev.filter((f) => f.id !== id));
     if (isSupabaseActive) {
-      await supabase.from('faqs').delete().eq('id', id);
+      try {
+        const { error } = await supabase.from('faqs').delete().eq('id', id);
+        if (error) throw error;
+        await fetchSupabaseData();
+        showToast('FAQ deleted from Supabase');
+      } catch (err: any) {
+        showToast(`Delete FAQ failed: ${err?.message}`, 'error');
+        return;
+      }
+    } else {
+      setFaqs((prev) => prev.filter((f) => f.id !== id));
+      showToast('FAQ deleted');
     }
-    showToast('FAQ deleted');
     logAction('Deleted FAQ', 'FAQs', `Deleted FAQ ${id}.`);
   };
 

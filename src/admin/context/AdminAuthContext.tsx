@@ -378,6 +378,7 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       case 'content':
       case 'users':
       case 'settings':
+      case 'system_check':
         return ['super_admin'].includes(currentUser.role);
       case 'lab_reports':
         return ['super_admin', 'lab_staff', 'doctor'].includes(currentUser.role);

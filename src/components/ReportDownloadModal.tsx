@@ -13,6 +13,7 @@ import {
   Printer
 } from 'lucide-react';
 import { LabReportRecord } from '../admin/types';
+import { formatDisplayPhone } from '../utils/phoneUtils';
 
 interface ReportDownloadModalProps {
   isOpen: boolean;
@@ -25,11 +26,13 @@ export const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
   onClose,
   lang
 }) => {
-  const { lookupLabReport } = useAdminData();
+  const { lookupLabReport, hospitalConfig } = useAdminData();
   const isUrdu = lang === 'ur';
 
-  const [reportIdInput, setReportIdInput] = useState('DAD-LAB-8921');
-  const [phoneInput, setPhoneInput] = useState('0300-4123890');
+  const hospitalPhone = formatDisplayPhone(hospitalConfig?.contact?.emergencyNumber) || '';
+
+  const [reportIdInput, setReportIdInput] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
   const [searched, setSearched] = useState(false);
   const [result, setResult] = useState<LabReportRecord | null>(null);
 
@@ -155,7 +158,7 @@ export const ReportDownloadModal: React.FC<ReportDownloadModalProps> = ({
                   Please verify that the Report ID and mobile number match your OPD invoice. If your test was taken today, it may still be processing.
                 </p>
                 <div className="pt-2 text-[11px] text-slate-600">
-                  Need help? Contact pathology counter: <strong>042-111-327-227</strong>
+                  Need help? Contact pathology counter: <strong>{hospitalPhone}</strong>
                 </div>
               </div>
             )}

@@ -38,6 +38,7 @@ import { ContentManagerPage } from './admin/pages/ContentManagerPage';
 import { MessagesPage } from './admin/pages/MessagesPage';
 import { UsersPage } from './admin/pages/UsersPage';
 import { SettingsPage } from './admin/pages/SettingsPage';
+import { SystemCheckPage } from './admin/pages/SystemCheckPage';
 
 export default function App() {
   const [lang, setLang] = useState<'en' | 'ur'>('en');
@@ -213,6 +214,8 @@ export default function App() {
         return <UsersPage lang={lang} />;
       case 'settings':
         return <SettingsPage lang={lang} />;
+      case 'system_check':
+        return <SystemCheckPage lang={lang} />;
       default:
         return <DashboardPage onNavigate={setAdminModule} lang={lang} />;
     }

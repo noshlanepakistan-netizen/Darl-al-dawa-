@@ -22,7 +22,8 @@ import {
   LogOut,
   ChevronDown,
   ExternalLink,
-  Clock
+  Clock,
+  Activity
 } from 'lucide-react';
 import { StaffRole } from '../types';
 
@@ -71,6 +72,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'messages', label: isUrdu ? 'پیغامات و انکوائریز' : 'Messages / Inbox', icon: Mail, badge: unreadMessagesCount },
     { id: 'users', label: isUrdu ? 'صارفین و رولز' : 'Users & Roles', icon: ShieldAlert },
     { id: 'settings', label: isUrdu ? 'سیٹنگز' : 'Settings', icon: Settings },
+    { id: 'system_check', label: isUrdu ? 'سسٹم چیک' : 'System Check', icon: Activity },
   ];
 
   const filteredNavItems = navItems.filter((item) => canAccess(item.id));

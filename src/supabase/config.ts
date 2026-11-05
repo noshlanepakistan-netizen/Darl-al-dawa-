@@ -26,6 +26,8 @@ const supabaseUrl = isSupabaseConfigured()
   ? rawUrl
   : 'https://placeholder.supabase.co';
 
+export const getSupabaseUrl = (): string => supabaseUrl;
+
 const supabaseAnonKey = isSupabaseConfigured()
   ? rawKey
   : 'placeholder-anon-key';

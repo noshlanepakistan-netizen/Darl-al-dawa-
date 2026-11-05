@@ -8,14 +8,10 @@ import {
   Pill,
   Home,
   FileCheck2,
-  CheckCircle,
   Building,
-  Sparkles,
-  ArrowRight,
-  Clock,
-  PhoneCall
+  Sparkles
 } from 'lucide-react';
-import { SERVICES_FACILITIES, UI_TRANSLATIONS } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface ServicesFacilitiesProps {
@@ -39,7 +35,7 @@ export const ServicesFacilities: React.FC<ServicesFacilitiesProps> = ({
   onBookHomeSampling
 }) => {
   const { services } = useAdminData();
-  const allServices = services && services.length > 0 ? services : SERVICES_FACILITIES;
+  const allServices = services || [];
   const t = UI_TRANSLATIONS[lang].services;
   const isUrdu = lang === 'ur';
 
@@ -59,6 +55,10 @@ export const ServicesFacilities: React.FC<ServicesFacilitiesProps> = ({
     if (activeCategory === 'inpatient') return service.id === 'theatres' || service.id === 'pharmacy';
     return true;
   });
+
+  if (allServices.length === 0) {
+    return null;
+  }
 
   return (
     <section id="services" className="py-12 md:py-16 bg-[#F7FAFC] relative">

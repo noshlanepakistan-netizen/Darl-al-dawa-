@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, ShieldCheck, Building2 } from 'lucide-react';
-import { FAQS, HOSPITAL_CONFIG, UI_TRANSLATIONS } from '../data/hospitalData';
+import { HelpCircle, ChevronDown, ShieldCheck } from 'lucide-react';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface FaqSectionProps {
@@ -8,8 +8,8 @@ interface FaqSectionProps {
 }
 
 export const FaqSection: React.FC<FaqSectionProps> = ({ lang }) => {
-  const { faqs } = useAdminData();
-  const allFaqs = faqs && faqs.length > 0 ? faqs : FAQS;
+  const { faqs, hospitalConfig } = useAdminData();
+  const allFaqs = faqs || [];
   const t = UI_TRANSLATIONS[lang].faq;
   const isUrdu = lang === 'ur';
 
@@ -34,6 +34,8 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ lang }) => {
   const toggleFaq = (id: string) => {
     setOpenFaqId((prev) => (prev === id ? '' : id));
   };
+
+  const insurancePartners = hospitalConfig?.insurancePartners || [];
 
   return (
     <section id="faq" className="py-12 md:py-16 bg-[#F7FAFC] relative">
@@ -77,68 +79,76 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ lang }) => {
         </div>
 
         {/* Accordion List */}
-        <div className="space-y-3 mb-10">
-          {filteredFaqs.map((faq) => {
-            const isOpen = openFaqId === faq.id;
+        {filteredFaqs.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center text-slate-500 text-sm mb-10">
+            {isUrdu ? 'اس وقت کوئی سوال دستیاب نہیں ہے۔' : 'No FAQs currently listed in this category.'}
+          </div>
+        ) : (
+          <div className="space-y-3 mb-10">
+            {filteredFaqs.map((faq) => {
+              const isOpen = openFaqId === faq.id;
 
-            return (
-              <div
-                key={faq.id}
-                className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden transition-all duration-200"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleFaq(faq.id)}
-                  aria-expanded={isOpen}
-                  className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+              return (
+                <div
+                  key={faq.id}
+                  className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden transition-all duration-200"
                 >
-                  <span className={`text-sm sm:text-base font-bold text-slate-900 ${isUrdu ? 'font-urdu text-lg' : 'font-heading'}`}>
-                    {isUrdu ? faq.questionUrdu : faq.question}
-                  </span>
-                  <div
-                    className={`w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600 transition-transform duration-300 ${
-                      isOpen ? 'rotate-180 bg-blue-50 text-[#1E5AA8]' : ''
-                    }`}
+                  <button
+                    type="button"
+                    onClick={() => toggleFaq(faq.id)}
+                    aria-expanded={isOpen}
+                    className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
                   >
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                </button>
+                    <span className={`text-sm sm:text-base font-bold text-slate-900 ${isUrdu ? 'font-urdu text-lg' : 'font-heading'}`}>
+                      {isUrdu ? faq.questionUrdu : faq.question}
+                    </span>
+                    <div
+                      className={`w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600 transition-transform duration-300 ${
+                        isOpen ? 'rotate-180 bg-blue-50 text-[#1E5AA8]' : ''
+                      }`}
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </button>
 
-                {isOpen && (
-                  <div className="px-4 sm:px-5 pb-5 pt-1 text-slate-600 text-xs sm:text-sm leading-relaxed border-t border-slate-100/80 animate-in fade-in duration-200">
-                    <p className={isUrdu ? 'font-urdu text-sm leading-loose' : ''}>
-                      {isUrdu ? faq.answerUrdu : faq.answer}
-                    </p>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  {isOpen && (
+                    <div className="px-4 sm:px-5 pb-5 pt-1 text-slate-600 text-xs sm:text-sm leading-relaxed border-t border-slate-100/80 animate-in fade-in duration-200">
+                      <p className={isUrdu ? 'font-urdu text-sm leading-loose' : ''}>
+                        {isUrdu ? faq.answerUrdu : faq.answer}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Accepted Insurance & Panel Companies Showcase */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 text-center shadow-xs">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1E5AA8] uppercase tracking-wider mb-2">
-            <ShieldCheck className="w-4 h-4 text-[#2E9E5B]" />
-            <span className={isUrdu ? 'font-urdu' : ''}>
-              {isUrdu ? 'صحت کارڈ پینل و انشورنس پارٹنرز' : 'Empaneled Health Insurance & Sehat Card Partners'}
-            </span>
-          </div>
-          <p className={`text-xs text-slate-500 max-w-xl mx-auto mb-4 ${isUrdu ? 'font-urdu' : ''}`}>
-            {isUrdu ? 'لاہور کے معروف انشورنس پینلز اور پنجاب حکومت کے صحت کارڈ پلس پر علاج کی سہولت' : 'Seamless cashless inpatient treatments on Punjab Sehat Card Plus and major corporate insurance plans'}
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {HOSPITAL_CONFIG.insurancePartners.map((partner, idx) => (
-              <span
-                key={idx}
-                className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#1E5AA8] transition-colors"
-              >
-                {partner}
+        {insurancePartners.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 text-center shadow-xs">
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1E5AA8] uppercase tracking-wider mb-2">
+              <ShieldCheck className="w-4 h-4 text-[#2E9E5B]" />
+              <span className={isUrdu ? 'font-urdu' : ''}>
+                {isUrdu ? 'صحت کارڈ پینل و انشورنس پارٹنرز' : 'Empaneled Health Insurance & Sehat Card Partners'}
               </span>
-            ))}
+            </div>
+            <p className={`text-xs text-slate-500 max-w-xl mx-auto mb-4 ${isUrdu ? 'font-urdu' : ''}`}>
+              {isUrdu ? 'لاہور کے معروف انشورنس پینلز اور پنجاب حکومت کے صحت کارڈ پلس پر علاج کی سہولت' : 'Seamless cashless inpatient treatments on Punjab Sehat Card Plus and major corporate insurance plans'}
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {insurancePartners.map((partner, idx) => (
+                <span
+                  key={idx}
+                  className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#1E5AA8] transition-colors"
+                >
+                  {partner}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
     </section>

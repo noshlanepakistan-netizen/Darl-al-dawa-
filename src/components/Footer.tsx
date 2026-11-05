@@ -4,7 +4,6 @@ import {
   Mail,
   MapPin,
   Clock,
-  ShieldCheck,
   Facebook,
   Instagram,
   Youtube,
@@ -13,7 +12,7 @@ import {
   Heart
 } from 'lucide-react';
 import { Logo } from './Logo';
-import { DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
 
@@ -23,7 +22,7 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
-  const { hospitalConfig } = useAdminData();
+  const { hospitalConfig, departments } = useAdminData();
   const t = UI_TRANSLATIONS[lang].footer;
   const isUrdu = lang === 'ur';
 
@@ -34,6 +33,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
     ? (hospitalConfig?.contact?.addressUrdu || 'گلبرگ 3، لاہور، پنجاب')
     : (hospitalConfig?.contact?.address || '42-A, Main Boulevard, Gulberg III, Lahore, Punjab');
 
+  const deptsList = departments || [];
 
   const handleNavClick = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
@@ -71,7 +71,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
             {/* Social Icons */}
             <div className="flex items-center gap-3 pt-2">
               <a
-                href="https://facebook.com"
+                href={hospitalConfig?.socialLinks?.facebook || "https://facebook.com"}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Facebook"
@@ -80,7 +80,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
                 <Facebook className="w-4 h-4" />
               </a>
               <a
-                href="https://instagram.com"
+                href={hospitalConfig?.socialLinks?.instagram || "https://instagram.com"}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Instagram"
@@ -89,7 +89,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
                 <Instagram className="w-4 h-4" />
               </a>
               <a
-                href="https://youtube.com"
+                href={hospitalConfig?.socialLinks?.youtube || "https://youtube.com"}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="YouTube"
@@ -148,7 +148,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
               <span>{t.departmentsList}</span>
             </h4>
             <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
-              {DEPARTMENTS.slice(0, 7).map((dept) => (
+              {deptsList.slice(0, 7).map((dept) => (
                 <li key={dept.id}>
                   <a
                     href="#departments"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CalendarCheck, PhoneCall, ShieldCheck, Clock, Users, Award, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
-import { DEPARTMENTS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
 
@@ -19,7 +19,7 @@ export const Hero: React.FC<HeroProps> = ({
   const t = UI_TRANSLATIONS[lang].hero;
   const isUrdu = lang === 'ur';
   const { homepageSettings, hospitalConfig, departments: liveDepts } = useAdminData();
-  const deptsList = liveDepts && liveDepts.length > 0 ? liveDepts : DEPARTMENTS;
+  const deptsList = liveDepts || [];
 
   const heroHeading = homepageSettings?.heroHeading || (isUrdu ? 'دار الدواء میڈیکل سنٹر' : 'Caring for You, Every Step of the Way');
   const heroSubtitle = homepageSettings?.heroSubheading || t.subtitle;
@@ -45,12 +45,18 @@ export const Hero: React.FC<HeroProps> = ({
   // Quick form state
   const [quickName, setQuickName] = useState('');
   const [quickPhone, setQuickPhone] = useState('');
-  const [quickDept, setQuickDept] = useState(DEPARTMENTS[0].id);
+  const [quickDept, setQuickDept] = useState(liveDepts?.[0]?.id || 'cardiology');
   const [quickDate, setQuickDate] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow.toISOString().split('T')[0];
   });
+
+  useEffect(() => {
+    if (liveDepts && liveDepts.length > 0 && (!quickDept || quickDept === 'cardiology')) {
+      setQuickDept(liveDepts[0].id);
+    }
+  }, [liveDepts]);
   const [formSubmitted, setFormSubmitted] = useState(false);
 
   const handleQuickSubmit = (e: React.FormEvent) => {

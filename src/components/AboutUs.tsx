@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Target, Eye, History, Award, CheckCircle, Shield, Building2, ChevronDown, ChevronUp } from 'lucide-react';
-import { HOSPITAL_CONFIG, UI_TRANSLATIONS } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface AboutUsProps {
@@ -10,7 +10,7 @@ interface AboutUsProps {
 export const AboutUs: React.FC<AboutUsProps> = ({ lang }) => {
   const t = UI_TRANSLATIONS[lang].about;
   const isUrdu = lang === 'ur';
-  const { homepageSettings } = useAdminData();
+  const { homepageSettings, hospitalConfig } = useAdminData();
 
   const aboutBadge = homepageSettings?.aboutBadge || t.badge;
   const aboutHeading = homepageSettings?.aboutHeading || t.heading;
@@ -21,6 +21,9 @@ export const AboutUs: React.FC<AboutUsProps> = ({ lang }) => {
 
   const [activeAboutTab, setActiveAboutTab] = useState<'story' | 'mission' | 'accreditations'>('story');
   const [isExpandedStory, setIsExpandedStory] = useState(false);
+
+  const trustStats = hospitalConfig?.trustStats || [];
+  const accreditations = hospitalConfig?.accreditations || [];
 
   return (
     <section id="about" className="py-12 md:py-16 bg-white relative">
@@ -169,7 +172,7 @@ export const AboutUs: React.FC<AboutUsProps> = ({ lang }) => {
 
               {/* Quick stats counter */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-slate-200">
-                {HOSPITAL_CONFIG.trustStats.map((stat, sIdx) => (
+                {trustStats.map((stat, sIdx) => (
                   <div key={sIdx} className="text-center p-2 rounded-lg bg-white border border-slate-100">
                     <div className="text-base sm:text-lg font-bold text-[#1E5AA8] font-mono">{stat.value}</div>
                     <div className="text-[10px] text-slate-500 truncate">{isUrdu ? stat.labelUrdu : stat.label}</div>
@@ -222,7 +225,7 @@ export const AboutUs: React.FC<AboutUsProps> = ({ lang }) => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {HOSPITAL_CONFIG.accreditations.map((item, idx) => (
+              {accreditations.map((item, idx) => (
                 <div
                   key={idx}
                   className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs flex flex-col justify-between"

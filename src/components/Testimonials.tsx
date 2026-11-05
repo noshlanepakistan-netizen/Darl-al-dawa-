@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Star, ChevronLeft, ChevronRight, Quote, CheckCircle, MessageSquareQuote } from 'lucide-react';
-import { TESTIMONIALS, UI_TRANSLATIONS } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface TestimonialsProps {
@@ -9,17 +9,19 @@ interface TestimonialsProps {
 
 export const Testimonials: React.FC<TestimonialsProps> = ({ lang }) => {
   const { testimonials } = useAdminData();
-  const allTestimonials = testimonials && testimonials.length > 0 ? testimonials : TESTIMONIALS;
+  const allTestimonials = testimonials || [];
   const t = UI_TRANSLATIONS[lang].testimonials;
   const isUrdu = lang === 'ur';
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const prev = () => {
+    if (allTestimonials.length === 0) return;
     setCurrentIndex((prevIdx) => (prevIdx === 0 ? allTestimonials.length - 1 : prevIdx - 1));
   };
 
   const next = () => {
+    if (allTestimonials.length === 0) return;
     setCurrentIndex((prevIdx) => (prevIdx === allTestimonials.length - 1 ? 0 : prevIdx + 1));
   };
 
@@ -31,6 +33,10 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ lang }) => {
     }, 7000);
     return () => clearInterval(timer);
   }, [allTestimonials.length]);
+
+  if (allTestimonials.length === 0) {
+    return null;
+  }
 
   const activeTestimonial = allTestimonials[currentIndex] || allTestimonials[0];
 
@@ -90,7 +96,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ lang }) => {
 
               {/* Star Rating */}
               <div className="flex items-center gap-1 mt-2">
-                {[...Array(activeTestimonial.rating)].map((_, i) => (
+                {[...Array(activeTestimonial.rating || 5)].map((_, i) => (
                   <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 ))}
               </div>
@@ -131,19 +137,21 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ lang }) => {
           </div>
 
           {/* Dots Indicator */}
-          <div className="flex justify-center gap-1.5 mt-5">
-            {TESTIMONIALS.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setCurrentIndex(idx)}
-                aria-label={`Go to slide ${idx + 1}`}
-                className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  currentIndex === idx ? 'w-5 bg-[#1E5AA8]' : 'w-1.5 bg-slate-300'
-                }`}
-              />
-            ))}
-          </div>
+          {allTestimonials.length > 1 && (
+            <div className="flex justify-center gap-1.5 mt-5">
+              {allTestimonials.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setCurrentIndex(idx)}
+                  aria-label={`Go to slide ${idx + 1}`}
+                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                    currentIndex === idx ? 'w-5 bg-[#1E5AA8]' : 'w-1.5 bg-slate-300'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
 
         </div>
 

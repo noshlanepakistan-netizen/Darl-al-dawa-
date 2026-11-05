@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Camera, X, ChevronLeft, ChevronRight, Maximize2, ChevronDown, ChevronUp } from 'lucide-react';
-import { GALLERY_ITEMS, UI_TRANSLATIONS, GalleryItem } from '../data/hospitalData';
+import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 
 interface GallerySectionProps {
@@ -9,7 +9,7 @@ interface GallerySectionProps {
 
 export const GallerySection: React.FC<GallerySectionProps> = ({ lang }) => {
   const { gallery } = useAdminData();
-  const allGalleryItems = gallery && gallery.length > 0 ? gallery : GALLERY_ITEMS;
+  const allGalleryItems = gallery || [];
   const t = UI_TRANSLATIONS[lang].gallery;
   const isUrdu = lang === 'ur';
 
@@ -48,6 +48,10 @@ export const GallerySection: React.FC<GallerySectionProps> = ({ lang }) => {
     if (lightboxIndex === null) return;
     setLightboxIndex((prev) => (prev! === 0 ? filteredItems.length - 1 : prev! - 1));
   };
+
+  if (allGalleryItems.length === 0) {
+    return null;
+  }
 
   return (
     <section id="gallery" className="py-12 md:py-16 bg-[#F7FAFC] relative">

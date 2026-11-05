@@ -850,7 +850,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
                   ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold active:scale-95 disabled:opacity-50'
                   : 'bg-teal-700 hover:bg-teal-800 text-white active:scale-95 disabled:opacity-50'
               }`}
-              title="Reads existing hospital data from this browser's localStorage and uploads it directly to Supabase"
+              title="Uploads and initializes the standard hospital catalog directly to Supabase cloud database"
             >
               <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-bounce' : ''}`} />
               <span>{isImporting ? 'Importing Local Data...' : 'Import Local Data to Database'}</span>
