@@ -255,27 +255,13 @@ export default function App() {
   // 5) Doctor Profiles section
   // 6) All remaining sections (Services, About, Packages, Testimonials, Gallery, Blog, FAQs, Contact)
   // 7) Footer
-  if (isLoading && viewMode === 'website') {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center select-none">
-        <div className="relative mb-5">
-          <div className="w-16 h-16 rounded-2xl bg-white shadow-lg border border-slate-200/80 flex items-center justify-center">
-            <span className="text-[#1E5AA8] font-black text-2xl font-heading tracking-wide">DAD</span>
-          </div>
-          <div className="absolute -inset-1.5 rounded-2xl bg-[#2E9E5B]/20 animate-ping" />
-        </div>
-        <div className="text-base sm:text-lg font-bold text-slate-900 font-heading">Dar al Dawa Medical Center</div>
-        <div className="text-xs text-[#2E9E5B] font-urdu mt-0.5 font-semibold">دارالدواء میڈیکل سنٹر</div>
-        <div className="mt-5 flex items-center gap-2 text-xs text-slate-500">
-          <span className="w-2 h-2 rounded-full bg-[#2E9E5B] animate-pulse" />
-          <span>Loading hospital data...</span>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className={`min-h-screen bg-[#F7FAFC] text-[#1F2933] ${lang === 'ur' ? 'font-urdu' : 'font-body'}`}>
+      {isLoading && (
+        <div className="fixed top-0 left-0 right-0 h-1 bg-[#2E9E5B] z-[99999] animate-pulse" />
+      )}
 
       {/* Notifications / Toast */}
       <ToastContainer />

@@ -333,13 +333,23 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       setIsLoading(true);
 
-      // 1. Settings (Check 'settings' table first, fallback to 'hospital_settings')
+      // 1. Settings (Check 'settings' table where id = 'main' first, fallback to limit(1), then 'hospital_settings')
       let loadedSettings = false;
       try {
-        const { data: sData, error: sErr } = await supabase.from('settings').select('*').limit(1).maybeSingle();
+        const { data: sData, error: sErr } = await supabase
+          .from('settings')
+          .select('*')
+          .eq('id', 'main')
+          .maybeSingle();
         if (sData && !sErr) {
           setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(sData, prev));
           loadedSettings = true;
+        } else {
+          const { data: sDataAny } = await supabase.from('settings').select('*').limit(1).maybeSingle();
+          if (sDataAny) {
+            setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(sDataAny, prev));
+            loadedSettings = true;
+          }
         }
       } catch (err) {
         console.warn('Could not query settings table:', err);
@@ -347,9 +357,18 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (!loadedSettings) {
         try {
-          const { data: configData } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
+          const { data: configData } = await supabase
+            .from('hospital_settings')
+            .select('*')
+            .eq('id', 'main')
+            .maybeSingle();
           if (configData) {
             setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(configData, prev));
+          } else {
+            const { data: configDataAny } = await supabase.from('hospital_settings').select('*').limit(1).maybeSingle();
+            if (configDataAny) {
+              setHospitalConfig((prev) => mapSettingsRowToHospitalConfig(configDataAny, prev));
+            }
           }
         } catch (err) {
           console.warn('Could not query hospital_settings table:', err);
@@ -600,16 +619,19 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         );
       }
     } catch (err) {
-      console.error('Error fetching data from Supabase:', err);
-      showToast('Could not sync with Supabase cloud database. Using cached data.', 'error');
+      console.warn('Initial Supabase fetch:', err);
     } finally {
       setIsLoading(false);
     }
   }, [isSupabaseActive]);
 
-  // Initial load
+  // Initial load with guaranteed safety timeout so preview never gets stuck
   useEffect(() => {
     fetchSupabaseData();
+    const safetyTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2500);
+    return () => clearTimeout(safetyTimer);
   }, [fetchSupabaseData]);
 
   // Real-time listener for Appointments (live updates on all devices)
@@ -711,12 +733,6 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const updateHospitalConfig = async (newConfig: Partial<typeof INITIAL_CONFIG>) => {
     const updated = { ...hospitalConfig, ...newConfig };
 
-    if (!isSupabaseActive) {
-      setHospitalConfig(updated);
-      showToast('Settings updated (add Supabase credentials to sync across devices)');
-      return;
-    }
-
     try {
       const rawWhatsapp = updated.contact?.whatsapp || '';
       const whatsappCleanVal = cleanWhatsAppNumber(rawWhatsapp);
@@ -757,64 +773,73 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updated_at: new Date().toISOString()
       };
 
-      // 1. Save to primary 'settings' table
-      let saved = false;
+      let confirmedRow: any = null;
       let lastError: any = null;
+
       try {
-        const { error: sError } = await supabase.from('settings').upsert(payload);
-        if (!sError) {
-          saved = true;
-        } else {
+        const { data: sData, error: sError } = await supabase
+          .from('settings')
+          .upsert(payload)
+          .select();
+
+        if (!sError && sData && sData.length > 0) {
+          confirmedRow = sData[0];
+        } else if (sError) {
           lastError = sError;
         }
       } catch (err) {
         lastError = err;
       }
 
-      // 2. Also keep 'hospital_settings' in sync
+      // Also sync to 'hospital_settings' table
       try {
-        const { error: hsError } = await supabase.from('hospital_settings').upsert({
-          id: 'main',
-          name: payload.name,
-          name_urdu: payload.name_urdu,
-          tagline: payload.tagline,
-          tagline_urdu: payload.tagline_urdu,
-          logo: payload.logo,
-          favicon: payload.favicon,
-          short_desc: payload.short_desc,
-          short_desc_urdu: payload.short_desc_urdu,
-          social_links: payload.social_links,
-          contact: payload.contact,
-          updated_at: payload.updated_at
-        });
-        if (!hsError) saved = true;
+        const { data: hsData, error: hsError } = await supabase
+          .from('hospital_settings')
+          .upsert({
+            id: 'main',
+            name: payload.name,
+            name_urdu: payload.name_urdu,
+            tagline: payload.tagline,
+            tagline_urdu: payload.tagline_urdu,
+            logo: payload.logo,
+            favicon: payload.favicon,
+            short_desc: payload.short_desc,
+            short_desc_urdu: payload.short_desc_urdu,
+            social_links: payload.social_links,
+            contact: payload.contact,
+            updated_at: payload.updated_at
+          })
+          .select();
+
+        if (!confirmedRow && !hsError && hsData && hsData.length > 0) {
+          confirmedRow = hsData[0];
+        }
       } catch (e) {
-        // Continue
+        // continue
       }
 
-      if (!saved && lastError) {
-        throw lastError;
+      if (!confirmedRow) {
+        throw lastError || new Error('Database write unconfirmed');
       }
 
       // Re-fetch fresh state directly from Supabase to confirm
       await fetchSupabaseData();
-      showToast('Saved successfully to Supabase!');
+      showToast('Saved to database ✓', 'success');
       logAction('Updated General Settings', 'Settings', 'Hospital details, contact info, or branding updated.');
     } catch (err: any) {
       console.error('Failed to update settings in Supabase:', err);
-      showToast(`Save failed: ${err?.message || 'Database error. Check Supabase connection and RLS.'}`, 'error');
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
   };
-
 
   // Operational Settings
   const updateSettings = async (newSettings: Partial<HospitalSettings>) => {
     const updated = { ...settings, ...newSettings };
-    setSettings(updated);
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('operational_settings').upsert({
+    try {
+      const { data, error } = await supabase
+        .from('operational_settings')
+        .upsert({
           id: 'main',
           slot_duration_minutes: updated.slotDurationMinutes,
           working_days: updated.workingDays,
@@ -827,16 +852,20 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           whatsapp_confirmation: updated.whatsappConfirmation,
           currency: updated.currency,
           updated_at: new Date().toISOString()
-        });
-        if (error) throw error;
-        showToast('System settings saved permanently to Supabase!');
-      } catch (err: any) {
-        console.error('Failed to update operational_settings:', err);
-        showToast(`Save failed: ${err?.message}`, 'error');
-      }
-    }
+        })
+        .select();
 
-    logAction('Updated System Settings', 'Settings', 'Operational settings and parameters modified.');
+      if (error || !data || data.length === 0) {
+        throw error || new Error('Database write unconfirmed');
+      }
+
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated System Settings', 'Settings', 'Operational settings and parameters modified.');
+    } catch (err: any) {
+      console.error('Failed to update operational_settings:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
+    }
   };
 
   // Homepage Settings
@@ -849,34 +878,78 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         ...(newSettings.sectionsVisibility || {})
       }
     };
-    setHomepageSettings(updated);
 
-    if (isSupabaseActive) {
+    try {
+      let confirmedRow: any = null;
+      let lastErr: any = null;
+
       try {
-        const { error } = await supabase.from('homepage_settings').upsert({
-          id: 'main',
-          hero_heading: updated.heroHeading,
-          hero_subheading: updated.heroSubheading,
-          hero_button_text: updated.heroButtonText,
-          hero_slider_images: updated.heroSliderImages,
-          about_badge: updated.aboutBadge,
-          about_heading: updated.aboutHeading,
-          about_subheading: updated.aboutSubheading,
-          about_mission: updated.aboutMission,
-          about_vision: updated.aboutVision,
-          about_image: updated.aboutImage,
-          sections_visibility: updated.sectionsVisibility,
-          updated_at: new Date().toISOString()
-        });
-        if (error) throw error;
-        showToast('Homepage settings saved permanently to Supabase!');
-      } catch (err: any) {
-        console.error('Failed to update homepage_settings:', err);
-        showToast(`Save failed: ${err?.message}`, 'error');
-      }
-    }
+        const { data: hcData, error: hcError } = await supabase
+          .from('homepage_content')
+          .upsert({
+            id: 'main',
+            hero_heading: updated.heroHeading,
+            hero_subheading: updated.heroSubheading,
+            hero_button_text: updated.heroButtonText,
+            hero_slider_images: updated.heroSliderImages,
+            about_badge: updated.aboutBadge,
+            about_heading: updated.aboutHeading,
+            about_subheading: updated.aboutSubheading,
+            about_mission: updated.aboutMission,
+            about_vision: updated.aboutVision,
+            about_image: updated.aboutImage,
+            sections_visibility: updated.sectionsVisibility,
+            updated_at: new Date().toISOString()
+          })
+          .select();
 
-    logAction('Updated Homepage CMS', 'Homepage Settings', 'Hero texts, banners, or section visibility updated.');
+        if (!hcError && hcData && hcData.length > 0) {
+          confirmedRow = hcData[0];
+        } else if (hcError) {
+          lastErr = hcError;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+
+      try {
+        const { data: hsData, error: hsError } = await supabase
+          .from('homepage_settings')
+          .upsert({
+            id: 'main',
+            hero_heading: updated.heroHeading,
+            hero_subheading: updated.heroSubheading,
+            hero_button_text: updated.heroButtonText,
+            hero_slider_images: updated.heroSliderImages,
+            about_badge: updated.aboutBadge,
+            about_heading: updated.aboutHeading,
+            about_subheading: updated.aboutSubheading,
+            about_mission: updated.aboutMission,
+            about_vision: updated.aboutVision,
+            about_image: updated.aboutImage,
+            sections_visibility: updated.sectionsVisibility,
+            updated_at: new Date().toISOString()
+          })
+          .select();
+
+        if (!confirmedRow && !hsError && hsData && hsData.length > 0) {
+          confirmedRow = hsData[0];
+        }
+      } catch (e) {
+        // continue
+      }
+
+      if (!confirmedRow) {
+        throw lastErr || new Error('Database write unconfirmed');
+      }
+
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated Homepage CMS', 'Homepage Settings', 'Hero texts, banners, or section visibility updated.');
+    } catch (err: any) {
+      console.error('Failed to update homepage_settings:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
+    }
   };
 
   // Appointments
@@ -915,39 +988,34 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-      } catch (err: any) {
-        showToast(`Status update failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, status } : a))
-      );
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .update({ status })
+        .eq('id', id)
+        .select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated Appointment Status', 'Appointments', `Appointment ${id} changed to ${status}.`);
+    } catch (err: any) {
+      console.error('Failed to update appointment status:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    showToast(`Appointment status updated to ${status}`);
-    logAction('Updated Appointment Status', 'Appointments', `Appointment ${id} changed to ${status}.`);
   };
 
   const deleteAppointment = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('appointments').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-      } catch (err: any) {
-        showToast(`Delete failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setAppointments((prev) => prev.filter((a) => a.id !== id));
+    try {
+      const { error } = await supabase.from('appointments').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted Appointment', 'Appointments', `Deleted appointment record ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete appointment:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    showToast('Appointment removed successfully');
-    logAction('Deleted Appointment', 'Appointments', `Deleted appointment record ${id}.`);
   };
 
   // Doctors
@@ -955,100 +1023,81 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = `doc-${Date.now()}`;
     const newDoc: Doctor = { ...doc, id };
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('doctors').insert({
-          id: newDoc.id,
-          name: newDoc.name,
-          name_urdu: newDoc.nameUrdu,
-          department_id: newDoc.departmentId,
-          specialty: newDoc.specialty,
-          specialty_urdu: newDoc.specialtyUrdu,
-          qualification: newDoc.qualification,
-          experience: newDoc.experience,
-          opd_timings: newDoc.opdTimings,
-          opd_timings_urdu: newDoc.opdTimingsUrdu,
-          days: newDoc.days,
-          days_urdu: newDoc.daysUrdu,
-          fee_pkr: newDoc.feePKR,
-          image: newDoc.image,
-          about: newDoc.about,
-          about_urdu: newDoc.aboutUrdu,
-          pmdc_no: newDoc.pmdcNo,
-          active: newDoc.active ?? true
-        });
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast(`Doctor ${newDoc.name} added permanently to Supabase!`);
-      } catch (err: any) {
-        showToast(`Failed to add doctor: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setDoctors((prev) => [...prev, newDoc]);
-      showToast(`Doctor ${newDoc.name} added!`);
-    }
+    try {
+      const { data, error } = await supabase.from('doctors').insert({
+        id: newDoc.id,
+        name: newDoc.name,
+        name_urdu: newDoc.nameUrdu,
+        department_id: newDoc.departmentId,
+        specialty: newDoc.specialty,
+        specialty_urdu: newDoc.specialtyUrdu,
+        qualification: newDoc.qualification,
+        experience: newDoc.experience,
+        opd_timings: newDoc.opdTimings,
+        opd_timings_urdu: newDoc.opdTimingsUrdu,
+        days: newDoc.days,
+        days_urdu: newDoc.daysUrdu,
+        fee_pkr: newDoc.feePKR,
+        image: newDoc.image,
+        about: newDoc.about,
+        about_urdu: newDoc.aboutUrdu,
+        pmdc_no: newDoc.pmdcNo,
+        active: newDoc.active ?? true
+      }).select();
 
-    logAction('Added Doctor', 'Doctors', `Added consultant ${doc.name}.`);
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Added Doctor', 'Doctors', `Added consultant ${doc.name}.`);
+    } catch (err: any) {
+      console.error('Failed to add doctor to Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
+    }
   };
 
   const updateDoctor = async (id: string, docUpdate: Partial<Doctor>) => {
-    if (isSupabaseActive) {
-      try {
-        const dbPayload: any = { updated_at: new Date().toISOString() };
-        if (docUpdate.name !== undefined) dbPayload.name = docUpdate.name;
-        if (docUpdate.nameUrdu !== undefined) dbPayload.name_urdu = docUpdate.nameUrdu;
-        if (docUpdate.departmentId !== undefined) dbPayload.department_id = docUpdate.departmentId;
-        if (docUpdate.specialty !== undefined) dbPayload.specialty = docUpdate.specialty;
-        if (docUpdate.specialtyUrdu !== undefined) dbPayload.specialty_urdu = docUpdate.specialtyUrdu;
-        if (docUpdate.qualification !== undefined) dbPayload.qualification = docUpdate.qualification;
-        if (docUpdate.experience !== undefined) dbPayload.experience = docUpdate.experience;
-        if (docUpdate.opdTimings !== undefined) dbPayload.opd_timings = docUpdate.opdTimings;
-        if (docUpdate.opdTimingsUrdu !== undefined) dbPayload.opd_timings_urdu = docUpdate.opdTimingsUrdu;
-        if (docUpdate.days !== undefined) dbPayload.days = docUpdate.days;
-        if (docUpdate.daysUrdu !== undefined) dbPayload.days_urdu = docUpdate.daysUrdu;
-        if (docUpdate.feePKR !== undefined) dbPayload.fee_pkr = docUpdate.feePKR;
-        if (docUpdate.image !== undefined) dbPayload.image = docUpdate.image;
-        if (docUpdate.about !== undefined) dbPayload.about = docUpdate.about;
-        if (docUpdate.aboutUrdu !== undefined) dbPayload.about_urdu = docUpdate.aboutUrdu;
-        if (docUpdate.pmdcNo !== undefined) dbPayload.pmdc_no = docUpdate.pmdcNo;
-        if (docUpdate.active !== undefined) dbPayload.active = docUpdate.active;
+    try {
+      const dbPayload: any = { updated_at: new Date().toISOString() };
+      if (docUpdate.name !== undefined) dbPayload.name = docUpdate.name;
+      if (docUpdate.nameUrdu !== undefined) dbPayload.name_urdu = docUpdate.nameUrdu;
+      if (docUpdate.departmentId !== undefined) dbPayload.department_id = docUpdate.departmentId;
+      if (docUpdate.specialty !== undefined) dbPayload.specialty = docUpdate.specialty;
+      if (docUpdate.specialtyUrdu !== undefined) dbPayload.specialty_urdu = docUpdate.specialtyUrdu;
+      if (docUpdate.qualification !== undefined) dbPayload.qualification = docUpdate.qualification;
+      if (docUpdate.experience !== undefined) dbPayload.experience = docUpdate.experience;
+      if (docUpdate.opdTimings !== undefined) dbPayload.opd_timings = docUpdate.opdTimings;
+      if (docUpdate.opdTimingsUrdu !== undefined) dbPayload.opd_timings_urdu = docUpdate.opdTimingsUrdu;
+      if (docUpdate.days !== undefined) dbPayload.days = docUpdate.days;
+      if (docUpdate.daysUrdu !== undefined) dbPayload.days_urdu = docUpdate.daysUrdu;
+      if (docUpdate.feePKR !== undefined) dbPayload.fee_pkr = docUpdate.feePKR;
+      if (docUpdate.image !== undefined) dbPayload.image = docUpdate.image;
+      if (docUpdate.about !== undefined) dbPayload.about = docUpdate.about;
+      if (docUpdate.aboutUrdu !== undefined) dbPayload.about_urdu = docUpdate.aboutUrdu;
+      if (docUpdate.pmdcNo !== undefined) dbPayload.pmdc_no = docUpdate.pmdcNo;
+      if (docUpdate.active !== undefined) dbPayload.active = docUpdate.active;
 
-        const { error } = await supabase.from('doctors').update(dbPayload).eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Doctor details updated in Supabase!');
-      } catch (err: any) {
-        showToast(`Update failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setDoctors((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, ...docUpdate } : d))
-      );
-      showToast('Doctor details updated!');
+      const { data, error } = await supabase.from('doctors').update(dbPayload).eq('id', id).select();
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated Doctor', 'Doctors', `Updated doctor profile ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to update doctor in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-
-    logAction('Updated Doctor', 'Doctors', `Updated doctor profile ${id}.`);
   };
 
   const deleteDoctor = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('doctors').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Doctor deleted from Supabase!');
-      } catch (err: any) {
-        showToast(`Delete failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setDoctors((prev) => prev.filter((d) => d.id !== id));
-      showToast('Doctor removed successfully');
+    try {
+      const { error } = await supabase.from('doctors').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted Doctor', 'Doctors', `Deleted doctor ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete doctor from Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-
-    logAction('Deleted Doctor', 'Doctors', `Deleted doctor ${id}.`);
   };
 
   const toggleDoctorActive = async (id: string) => {
@@ -1063,111 +1112,86 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = `dept-${Date.now()}`;
     const newDept: Department = { ...dept, id };
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('departments').insert({
-          id: newDept.id,
-          title: newDept.title,
-          title_urdu: newDept.titleUrdu,
-          icon_name: newDept.iconName,
-          description: newDept.description,
-          description_urdu: newDept.descriptionUrdu,
-          full_description: newDept.fullDescription,
-          image: newDept.image,
-          display_order: newDept.order || departments.length + 1,
-          features: newDept.features || [],
-          features_urdu: newDept.featuresUrdu || [],
-          head_doctor: newDept.headDoctor || ''
-        });
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast(`Department ${newDept.title} added to Supabase!`);
-      } catch (err: any) {
-        showToast(`Add department failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setDepartments((prev) => [...prev, newDept]);
-      showToast(`Department ${newDept.title} added!`);
-    }
+    try {
+      const { data, error } = await supabase.from('departments').insert({
+        id: newDept.id,
+        title: newDept.title,
+        title_urdu: newDept.titleUrdu,
+        icon_name: newDept.iconName,
+        description: newDept.description,
+        description_urdu: newDept.descriptionUrdu,
+        full_description: newDept.fullDescription,
+        image: newDept.image,
+        display_order: newDept.order || departments.length + 1,
+        features: newDept.features || [],
+        features_urdu: newDept.featuresUrdu || [],
+        head_doctor: newDept.headDoctor || ''
+      }).select();
 
-    logAction('Added Department', 'Departments', `Added department ${dept.title}.`);
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Added Department', 'Departments', `Added department ${dept.title}.`);
+    } catch (err: any) {
+      console.error('Failed to add department to Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
+    }
   };
 
   const updateDepartment = async (id: string, deptUpdate: Partial<Department>) => {
-    if (isSupabaseActive) {
-      try {
-        const payload: any = { updated_at: new Date().toISOString() };
-        if (deptUpdate.title !== undefined) payload.title = deptUpdate.title;
-        if (deptUpdate.titleUrdu !== undefined) payload.title_urdu = deptUpdate.titleUrdu;
-        if (deptUpdate.iconName !== undefined) payload.icon_name = deptUpdate.iconName;
-        if (deptUpdate.description !== undefined) payload.description = deptUpdate.description;
-        if (deptUpdate.descriptionUrdu !== undefined) payload.description_urdu = deptUpdate.descriptionUrdu;
-        if (deptUpdate.fullDescription !== undefined) payload.full_description = deptUpdate.fullDescription;
-        if (deptUpdate.image !== undefined) payload.image = deptUpdate.image;
-        if (deptUpdate.order !== undefined) payload.display_order = deptUpdate.order;
-        if (deptUpdate.features !== undefined) payload.features = deptUpdate.features;
-        if (deptUpdate.featuresUrdu !== undefined) payload.features_urdu = deptUpdate.featuresUrdu;
-        if (deptUpdate.headDoctor !== undefined) payload.head_doctor = deptUpdate.headDoctor;
+    try {
+      const payload: any = { updated_at: new Date().toISOString() };
+      if (deptUpdate.title !== undefined) payload.title = deptUpdate.title;
+      if (deptUpdate.titleUrdu !== undefined) payload.title_urdu = deptUpdate.titleUrdu;
+      if (deptUpdate.iconName !== undefined) payload.icon_name = deptUpdate.iconName;
+      if (deptUpdate.description !== undefined) payload.description = deptUpdate.description;
+      if (deptUpdate.descriptionUrdu !== undefined) payload.description_urdu = deptUpdate.descriptionUrdu;
+      if (deptUpdate.fullDescription !== undefined) payload.full_description = deptUpdate.fullDescription;
+      if (deptUpdate.image !== undefined) payload.image = deptUpdate.image;
+      if (deptUpdate.order !== undefined) payload.display_order = deptUpdate.order;
+      if (deptUpdate.features !== undefined) payload.features = deptUpdate.features;
+      if (deptUpdate.featuresUrdu !== undefined) payload.features_urdu = deptUpdate.featuresUrdu;
+      if (deptUpdate.headDoctor !== undefined) payload.head_doctor = deptUpdate.headDoctor;
 
-        const { error } = await supabase.from('departments').update(payload).eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Department updated in Supabase!');
-      } catch (err: any) {
-        showToast(`Update department failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setDepartments((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, ...deptUpdate } : d))
-      );
-      showToast('Department updated!');
+      const { data, error } = await supabase.from('departments').update(payload).eq('id', id).select();
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated Department', 'Departments', `Updated department ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to update department in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-
-    logAction('Updated Department', 'Departments', `Updated department ${id}.`);
   };
 
   const deleteDepartment = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('departments').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Department deleted from Supabase!');
-      } catch (err: any) {
-        showToast(`Delete department failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setDepartments((prev) => prev.filter((d) => d.id !== id));
-      showToast('Department removed successfully');
+    try {
+      const { error } = await supabase.from('departments').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted Department', 'Departments', `Deleted department ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete department from Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-
-    logAction('Deleted Department', 'Departments', `Deleted department ${id}.`);
   };
 
   const reorderDepartments = async (newOrder: Department[]) => {
     const updated = newOrder.map((dept, index) => ({ ...dept, order: index + 1 }));
 
-    if (isSupabaseActive) {
-      try {
-        for (const dept of updated) {
-          const { error } = await supabase.from('departments').update({ display_order: dept.order }).eq('id', dept.id);
-          if (error) throw error;
-        }
-        await fetchSupabaseData();
-        showToast('Department order updated in Supabase!');
-      } catch (err: any) {
-        showToast(`Reorder failed: ${err?.message}`, 'error');
-        return;
+    try {
+      for (const dept of updated) {
+        const { error } = await supabase.from('departments').update({ display_order: dept.order }).eq('id', dept.id);
+        if (error) throw error;
       }
-    } else {
-      setDepartments(updated);
-      showToast('Department display order updated!');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Reordered Departments', 'Departments', 'Updated department order sequence.');
+    } catch (err: any) {
+      console.error('Failed to reorder departments in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-
-    logAction('Reordered Departments', 'Departments', 'Updated department order sequence.');
   };
 
   // Services
@@ -1175,79 +1199,63 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = `srv-${Date.now()}`;
     const newSrv = { ...srv, id };
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('services').insert({
-          id: newSrv.id,
-          title: newSrv.title,
-          title_urdu: newSrv.titleUrdu,
-          icon_name: newSrv.iconName,
-          description: newSrv.description,
-          description_urdu: newSrv.descriptionUrdu,
-          badge: newSrv.badge,
-          badge_urdu: newSrv.badgeUrdu,
-          image: newSrv.image
-        });
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast(`Service "${newSrv.title}" added to Supabase!`);
-      } catch (err: any) {
-        console.error('Failed to insert service into Supabase:', err);
-        showToast(`Failed to add service: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setServices((prev) => [...prev, newSrv]);
-      showToast(`Service "${newSrv.title}" added!`);
+    try {
+      const { data, error } = await supabase.from('services').insert({
+        id: newSrv.id,
+        title: newSrv.title,
+        title_urdu: newSrv.titleUrdu,
+        icon_name: newSrv.iconName,
+        description: newSrv.description,
+        description_urdu: newSrv.descriptionUrdu,
+        badge: newSrv.badge,
+        badge_urdu: newSrv.badgeUrdu,
+        image: newSrv.image
+      }).select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Added Service', 'Services', `Added service ${srv.title}.`);
+    } catch (err: any) {
+      console.error('Failed to insert service into Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Added Service', 'Services', `Added service ${srv.title}.`);
   };
 
   const updateService = async (id: string, srvUpdate: Partial<ServiceFacility>) => {
-    if (isSupabaseActive) {
-      try {
-        const payload: any = { updated_at: new Date().toISOString() };
-        if (srvUpdate.title !== undefined) payload.title = srvUpdate.title;
-        if (srvUpdate.titleUrdu !== undefined) payload.title_urdu = srvUpdate.titleUrdu;
-        if (srvUpdate.iconName !== undefined) payload.icon_name = srvUpdate.iconName;
-        if (srvUpdate.description !== undefined) payload.description = srvUpdate.description;
-        if (srvUpdate.descriptionUrdu !== undefined) payload.description_urdu = srvUpdate.descriptionUrdu;
-        if (srvUpdate.badge !== undefined) payload.badge = srvUpdate.badge;
-        if (srvUpdate.badgeUrdu !== undefined) payload.badge_urdu = srvUpdate.badgeUrdu;
-        if (srvUpdate.image !== undefined) payload.image = srvUpdate.image;
+    try {
+      const payload: any = { updated_at: new Date().toISOString() };
+      if (srvUpdate.title !== undefined) payload.title = srvUpdate.title;
+      if (srvUpdate.titleUrdu !== undefined) payload.title_urdu = srvUpdate.titleUrdu;
+      if (srvUpdate.iconName !== undefined) payload.icon_name = srvUpdate.iconName;
+      if (srvUpdate.description !== undefined) payload.description = srvUpdate.description;
+      if (srvUpdate.descriptionUrdu !== undefined) payload.description_urdu = srvUpdate.descriptionUrdu;
+      if (srvUpdate.badge !== undefined) payload.badge = srvUpdate.badge;
+      if (srvUpdate.badgeUrdu !== undefined) payload.badge_urdu = srvUpdate.badgeUrdu;
+      if (srvUpdate.image !== undefined) payload.image = srvUpdate.image;
 
-        const { error } = await supabase.from('services').update(payload).eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Service details updated in Supabase!');
-      } catch (err: any) {
-        console.error('Failed to update service in Supabase:', err);
-        showToast(`Update service failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setServices((prev) => prev.map((s) => (s.id === id ? { ...s, ...srvUpdate } : s)));
-      showToast('Service details updated!');
+      const { data, error } = await supabase.from('services').update(payload).eq('id', id).select();
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated Service', 'Services', `Updated service ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to update service in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Updated Service', 'Services', `Updated service ${id}.`);
   };
 
   const deleteService = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('services').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Service removed from Supabase');
-      } catch (err: any) {
-        showToast(`Delete service failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setServices((prev) => prev.filter((s) => s.id !== id));
-      showToast('Service removed successfully');
+    try {
+      const { error } = await supabase.from('services').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted Service', 'Services', `Deleted service ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete service from Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Deleted Service', 'Services', `Deleted service ${id}.`);
   };
 
   // Packages
@@ -1255,89 +1263,73 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = `pkg-${Date.now()}`;
     const newPkg = { ...pkg, id };
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('packages').insert({
-          id: newPkg.id,
-          title: newPkg.title,
-          title_urdu: newPkg.titleUrdu,
-          original_price: newPkg.originalPrice,
-          discounted_price: newPkg.discountedPrice,
-          popular: newPkg.popular ?? false,
-          category: newPkg.category,
-          category_urdu: newPkg.categoryUrdu,
-          fasting_required: newPkg.fastingRequired,
-          fasting_required_urdu: newPkg.fastingRequiredUrdu,
-          report_time: newPkg.reportTime,
-          report_time_urdu: newPkg.reportTimeUrdu,
-          tests_included: newPkg.testsIncluded,
-          tests_included_urdu: newPkg.testsIncludedUrdu
-        });
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast(`Package "${newPkg.title}" created in Supabase!`);
-      } catch (err: any) {
-        console.error('Failed to add package to Supabase:', err);
-        showToast(`Add package failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setPackages((prev) => [...prev, newPkg]);
-      showToast(`Package "${newPkg.title}" created!`);
+    try {
+      const { data, error } = await supabase.from('packages').insert({
+        id: newPkg.id,
+        title: newPkg.title,
+        title_urdu: newPkg.titleUrdu,
+        original_price: newPkg.originalPrice,
+        discounted_price: newPkg.discountedPrice,
+        popular: newPkg.popular ?? false,
+        category: newPkg.category,
+        category_urdu: newPkg.categoryUrdu,
+        fasting_required: newPkg.fastingRequired,
+        fasting_required_urdu: newPkg.fastingRequiredUrdu,
+        report_time: newPkg.reportTime,
+        report_time_urdu: newPkg.reportTimeUrdu,
+        tests_included: newPkg.testsIncluded,
+        tests_included_urdu: newPkg.testsIncludedUrdu
+      }).select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Added Package', 'Packages', `Added package ${pkg.title}.`);
+    } catch (err: any) {
+      console.error('Failed to add package to Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Added Package', 'Packages', `Added package ${pkg.title}.`);
   };
 
   const updatePackage = async (id: string, pkgUpdate: Partial<HealthPackage>) => {
-    if (isSupabaseActive) {
-      try {
-        const payload: any = { updated_at: new Date().toISOString() };
-        if (pkgUpdate.title !== undefined) payload.title = pkgUpdate.title;
-        if (pkgUpdate.titleUrdu !== undefined) payload.title_urdu = pkgUpdate.titleUrdu;
-        if (pkgUpdate.originalPrice !== undefined) payload.original_price = pkgUpdate.originalPrice;
-        if (pkgUpdate.discountedPrice !== undefined) payload.discounted_price = pkgUpdate.discountedPrice;
-        if (pkgUpdate.popular !== undefined) payload.popular = pkgUpdate.popular;
-        if (pkgUpdate.category !== undefined) payload.category = pkgUpdate.category;
-        if (pkgUpdate.categoryUrdu !== undefined) payload.category_urdu = pkgUpdate.categoryUrdu;
-        if (pkgUpdate.fastingRequired !== undefined) payload.fasting_required = pkgUpdate.fastingRequired;
-        if (pkgUpdate.fastingRequiredUrdu !== undefined) payload.fasting_required_urdu = pkgUpdate.fastingRequiredUrdu;
-        if (pkgUpdate.reportTime !== undefined) payload.report_time = pkgUpdate.reportTime;
-        if (pkgUpdate.reportTimeUrdu !== undefined) payload.report_time_urdu = pkgUpdate.reportTimeUrdu;
-        if (pkgUpdate.testsIncluded !== undefined) payload.tests_included = pkgUpdate.testsIncluded;
-        if (pkgUpdate.testsIncludedUrdu !== undefined) payload.tests_included_urdu = pkgUpdate.testsIncludedUrdu;
+    try {
+      const payload: any = { updated_at: new Date().toISOString() };
+      if (pkgUpdate.title !== undefined) payload.title = pkgUpdate.title;
+      if (pkgUpdate.titleUrdu !== undefined) payload.title_urdu = pkgUpdate.titleUrdu;
+      if (pkgUpdate.originalPrice !== undefined) payload.original_price = pkgUpdate.originalPrice;
+      if (pkgUpdate.discountedPrice !== undefined) payload.discounted_price = pkgUpdate.discountedPrice;
+      if (pkgUpdate.popular !== undefined) payload.popular = pkgUpdate.popular;
+      if (pkgUpdate.category !== undefined) payload.category = pkgUpdate.category;
+      if (pkgUpdate.categoryUrdu !== undefined) payload.category_urdu = pkgUpdate.categoryUrdu;
+      if (pkgUpdate.fastingRequired !== undefined) payload.fasting_required = pkgUpdate.fastingRequired;
+      if (pkgUpdate.fastingRequiredUrdu !== undefined) payload.fasting_required_urdu = pkgUpdate.fastingRequiredUrdu;
+      if (pkgUpdate.reportTime !== undefined) payload.report_time = pkgUpdate.reportTime;
+      if (pkgUpdate.reportTimeUrdu !== undefined) payload.report_time_urdu = pkgUpdate.reportTimeUrdu;
+      if (pkgUpdate.testsIncluded !== undefined) payload.tests_included = pkgUpdate.testsIncluded;
+      if (pkgUpdate.testsIncludedUrdu !== undefined) payload.tests_included_urdu = pkgUpdate.testsIncludedUrdu;
 
-        const { error } = await supabase.from('packages').update(payload).eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Package updated in Supabase!');
-      } catch (err: any) {
-        console.error('Failed to update package in Supabase:', err);
-        showToast(`Update package failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setPackages((prev) => prev.map((p) => (p.id === id ? { ...p, ...pkgUpdate } : p)));
-      showToast('Package updated!');
+      const { data, error } = await supabase.from('packages').update(payload).eq('id', id).select();
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated Package', 'Packages', `Updated package ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to update package in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Updated Package', 'Packages', `Updated package ${id}.`);
   };
 
   const deletePackage = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('packages').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Package deleted from Supabase');
-      } catch (err: any) {
-        showToast(`Delete package failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setPackages((prev) => prev.filter((p) => p.id !== id));
-      showToast('Package deleted');
+    try {
+      const { error } = await supabase.from('packages').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted Package', 'Packages', `Deleted package ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete package from Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Deleted Package', 'Packages', `Deleted package ${id}.`);
   };
 
   // Gallery
@@ -1345,50 +1337,40 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = `gal-${Date.now()}`;
     const newItem = { ...item, id };
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('gallery').insert({
-          id: newItem.id,
-          title: newItem.title,
-          title_urdu: newItem.titleUrdu,
-          category: newItem.category,
-          category_label: newItem.categoryLabel,
-          category_label_urdu: newItem.categoryLabelUrdu,
-          image: newItem.image,
-          description: newItem.description,
-          description_urdu: newItem.descriptionUrdu
-        });
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Gallery image added to Supabase!');
-      } catch (err: any) {
-        console.error('Failed to add gallery item to Supabase:', err);
-        showToast(`Add gallery item failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setGallery((prev) => [newItem, ...prev]);
-      showToast('Gallery image added!');
+    try {
+      const { data, error } = await supabase.from('gallery').insert({
+        id: newItem.id,
+        title: newItem.title,
+        title_urdu: newItem.titleUrdu,
+        category: newItem.category,
+        category_label: newItem.categoryLabel,
+        category_label_urdu: newItem.categoryLabelUrdu,
+        image: newItem.image,
+        description: newItem.description,
+        description_urdu: newItem.descriptionUrdu
+      }).select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Added Gallery Image', 'Gallery', `Uploaded image ${item.title}.`);
+    } catch (err: any) {
+      console.error('Failed to add gallery item to Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Added Gallery Image', 'Gallery', `Uploaded image ${item.title}.`);
   };
 
   const deleteGalleryItem = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('gallery').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Gallery item removed from Supabase');
-      } catch (err: any) {
-        showToast(`Delete gallery item failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setGallery((prev) => prev.filter((g) => g.id !== id));
-      showToast('Gallery item removed');
+    try {
+      const { error } = await supabase.from('gallery').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted Gallery Image', 'Gallery', `Removed gallery image ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete gallery item from Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Deleted Gallery Image', 'Gallery', `Removed gallery image ${id}.`);
   };
 
   // Testimonials
@@ -1396,83 +1378,67 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = `test-${Date.now()}`;
     const newItem = { ...item, id };
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('testimonials').insert({
-          id: newItem.id,
-          name: newItem.name,
-          name_urdu: newItem.nameUrdu,
-          city: newItem.city,
-          city_urdu: newItem.cityUrdu,
-          rating: newItem.rating,
-          department: newItem.department,
-          department_urdu: newItem.departmentUrdu,
-          comment: newItem.comment,
-          comment_urdu: newItem.commentUrdu,
-          date: newItem.date,
-          avatar: newItem.avatar
-        });
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Testimonial published to Supabase!');
-      } catch (err: any) {
-        console.error('Failed to add testimonial to Supabase:', err);
-        showToast(`Add testimonial failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setTestimonials((prev) => [newItem, ...prev]);
-      showToast('Testimonial published!');
+    try {
+      const { data, error } = await supabase.from('testimonials').insert({
+        id: newItem.id,
+        name: newItem.name,
+        name_urdu: newItem.nameUrdu,
+        city: newItem.city,
+        city_urdu: newItem.cityUrdu,
+        rating: newItem.rating,
+        department: newItem.department,
+        department_urdu: newItem.departmentUrdu,
+        comment: newItem.comment,
+        comment_urdu: newItem.commentUrdu,
+        date: newItem.date,
+        avatar: newItem.avatar
+      }).select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Added Testimonial', 'Testimonials', `Added testimonial by ${item.name}.`);
+    } catch (err: any) {
+      console.error('Failed to add testimonial to Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Added Testimonial', 'Testimonials', `Added testimonial by ${item.name}.`);
   };
 
   const updateTestimonial = async (id: string, itemUpdate: Partial<Testimonial>) => {
-    if (isSupabaseActive) {
-      try {
-        const payload: any = {};
-        if (itemUpdate.name !== undefined) payload.name = itemUpdate.name;
-        if (itemUpdate.nameUrdu !== undefined) payload.name_urdu = itemUpdate.nameUrdu;
-        if (itemUpdate.city !== undefined) payload.city = itemUpdate.city;
-        if (itemUpdate.cityUrdu !== undefined) payload.city_urdu = itemUpdate.cityUrdu;
-        if (itemUpdate.rating !== undefined) payload.rating = itemUpdate.rating;
-        if (itemUpdate.department !== undefined) payload.department = itemUpdate.department;
-        if (itemUpdate.departmentUrdu !== undefined) payload.department_urdu = itemUpdate.departmentUrdu;
-        if (itemUpdate.comment !== undefined) payload.comment = itemUpdate.comment;
-        if (itemUpdate.commentUrdu !== undefined) payload.comment_urdu = itemUpdate.commentUrdu;
-        if (itemUpdate.avatar !== undefined) payload.avatar = itemUpdate.avatar;
+    try {
+      const payload: any = {};
+      if (itemUpdate.name !== undefined) payload.name = itemUpdate.name;
+      if (itemUpdate.nameUrdu !== undefined) payload.name_urdu = itemUpdate.nameUrdu;
+      if (itemUpdate.city !== undefined) payload.city = itemUpdate.city;
+      if (itemUpdate.cityUrdu !== undefined) payload.city_urdu = itemUpdate.cityUrdu;
+      if (itemUpdate.rating !== undefined) payload.rating = itemUpdate.rating;
+      if (itemUpdate.department !== undefined) payload.department = itemUpdate.department;
+      if (itemUpdate.departmentUrdu !== undefined) payload.department_urdu = itemUpdate.departmentUrdu;
+      if (itemUpdate.comment !== undefined) payload.comment = itemUpdate.comment;
+      if (itemUpdate.commentUrdu !== undefined) payload.comment_urdu = itemUpdate.commentUrdu;
+      if (itemUpdate.avatar !== undefined) payload.avatar = itemUpdate.avatar;
 
-        const { error } = await supabase.from('testimonials').update(payload).eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Testimonial updated in Supabase!');
-      } catch (err: any) {
-        console.error('Failed to update testimonial in Supabase:', err);
-        showToast(`Update testimonial failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setTestimonials((prev) => prev.map((t) => (t.id === id ? { ...t, ...itemUpdate } : t)));
-      showToast('Testimonial updated!');
+      const { data, error } = await supabase.from('testimonials').update(payload).eq('id', id).select();
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+    } catch (err: any) {
+      console.error('Failed to update testimonial in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
   };
 
   const deleteTestimonial = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('testimonials').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('Testimonial deleted from Supabase');
-      } catch (err: any) {
-        showToast(`Delete testimonial failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setTestimonials((prev) => prev.filter((t) => t.id !== id));
-      showToast('Testimonial deleted');
+    try {
+      const { error } = await supabase.from('testimonials').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted Testimonial', 'Testimonials', `Removed testimonial ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete testimonial from Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Deleted Testimonial', 'Testimonials', `Removed testimonial ${id}.`);
   };
 
   // FAQs
@@ -1480,73 +1446,58 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = `faq-${Date.now()}`;
     const newFaq = { ...item, id };
 
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('faqs').insert({
-          id: newFaq.id,
-          question: newFaq.question,
-          question_urdu: newFaq.questionUrdu,
-          answer: newFaq.answer,
-          answer_urdu: newFaq.answerUrdu,
-          category: newFaq.category
-        });
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('FAQ created in Supabase!');
-      } catch (err: any) {
-        console.error('Failed to add FAQ to Supabase:', err);
-        showToast(`Add FAQ failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setFaqs((prev) => [...prev, newFaq]);
-      showToast('FAQ created!');
+    try {
+      const { data, error } = await supabase.from('faqs').insert({
+        id: newFaq.id,
+        question: newFaq.question,
+        question_urdu: newFaq.questionUrdu,
+        answer: newFaq.answer,
+        answer_urdu: newFaq.answerUrdu,
+        category: newFaq.category
+      }).select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Added FAQ', 'FAQs', `Added FAQ "${item.question.slice(0, 30)}...".`);
+    } catch (err: any) {
+      console.error('Failed to add FAQ to Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Added FAQ', 'FAQs', `Added FAQ "${item.question.slice(0, 30)}...".`);
   };
 
   const updateFaq = async (id: string, itemUpdate: Partial<FAQItem>) => {
-    if (isSupabaseActive) {
-      try {
-        const payload: any = {};
-        if (itemUpdate.question !== undefined) payload.question = itemUpdate.question;
-        if (itemUpdate.questionUrdu !== undefined) payload.question_urdu = itemUpdate.questionUrdu;
-        if (itemUpdate.answer !== undefined) payload.answer = itemUpdate.answer;
-        if (itemUpdate.answerUrdu !== undefined) payload.answer_urdu = itemUpdate.answerUrdu;
-        if (itemUpdate.category !== undefined) payload.category = itemUpdate.category;
+    try {
+      const payload: any = {};
+      if (itemUpdate.question !== undefined) payload.question = itemUpdate.question;
+      if (itemUpdate.questionUrdu !== undefined) payload.question_urdu = itemUpdate.questionUrdu;
+      if (itemUpdate.answer !== undefined) payload.answer = itemUpdate.answer;
+      if (itemUpdate.answerUrdu !== undefined) payload.answer_urdu = itemUpdate.answerUrdu;
+      if (itemUpdate.category !== undefined) payload.category = itemUpdate.category;
 
-        const { error } = await supabase.from('faqs').update(payload).eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('FAQ updated in Supabase!');
-      } catch (err: any) {
-        console.error('Failed to update FAQ in Supabase:', err);
-        showToast(`Update FAQ failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, ...itemUpdate } : f)));
-      showToast('FAQ updated!');
+      const { data, error } = await supabase.from('faqs').update(payload).eq('id', id).select();
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+    } catch (err: any) {
+      console.error('Failed to update FAQ in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
   };
 
   const deleteFaq = async (id: string) => {
-    if (isSupabaseActive) {
-      try {
-        const { error } = await supabase.from('faqs').delete().eq('id', id);
-        if (error) throw error;
-        await fetchSupabaseData();
-        showToast('FAQ deleted from Supabase');
-      } catch (err: any) {
-        showToast(`Delete FAQ failed: ${err?.message}`, 'error');
-        return;
-      }
-    } else {
-      setFaqs((prev) => prev.filter((f) => f.id !== id));
-      showToast('FAQ deleted');
+    try {
+      const { error } = await supabase.from('faqs').delete().eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Deleted FAQ', 'FAQs', `Deleted FAQ ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to delete FAQ from Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
     }
-    logAction('Deleted FAQ', 'FAQs', `Deleted FAQ ${id}.`);
   };
+
 
   // Messages
   const addMessage = (msg: Omit<ContactMessage, 'id' | 'createdAt' | 'read' | 'important'>) => {

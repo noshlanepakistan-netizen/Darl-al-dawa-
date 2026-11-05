@@ -3,36 +3,24 @@ import { createClient } from '@supabase/supabase-js';
 // Supabase Connection Configuration
 // If environment variables are set (e.g. in Netlify), they take priority.
 // Otherwise, the fallback values below are used directly.
-const rawUrl =
+export const SUPABASE_URL: string =
   import.meta.env.VITE_SUPABASE_URL || 'PASTE_YOUR_PROJECT_URL_HERE';
-const rawKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'PASTE_YOUR_ANON_PUBLIC_KEY_HERE';
+export const SUPABASE_ANON_KEY: string =
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'PASTE_YOUR_ANON_KEY_HERE';
 
-// Detect if valid Supabase credentials have been configured
-export const isSupabaseConfigured = (): boolean => {
-  return (
-    Boolean(rawUrl) &&
-    rawUrl.startsWith('http') &&
-    !rawUrl.includes('PASTE_YOUR_') &&
-    Boolean(rawKey) &&
-    !rawKey.includes('PASTE_YOUR_')
-  );
-};
+// Always returns true so the application operates strictly in cloud database mode
+export const isSupabaseConfigured = (): boolean => true;
 
-// Safe initialization so createClient never crashes on startup
-const supabaseUrl = isSupabaseConfigured()
-  ? rawUrl
-  : rawUrl.startsWith('http')
-  ? rawUrl
-  : 'https://placeholder.supabase.co';
+// Safe initialization for createClient constructor if URL is a placeholder
+const validUrl =
+  SUPABASE_URL && SUPABASE_URL.startsWith('http')
+    ? SUPABASE_URL
+    : 'https://placeholder.supabase.co';
 
-export const getSupabaseUrl = (): string => supabaseUrl;
+export const getSupabaseUrl = (): string => SUPABASE_URL;
 
-const supabaseAnonKey = isSupabaseConfigured()
-  ? rawKey
-  : 'placeholder-anon-key';
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Initialized strictly with the public anon key. Never the service_role key.
+export const supabase = createClient(validUrl, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -103,20 +91,11 @@ export const compressImage = async (file: File, maxDim = 1600, quality = 0.82): 
 };
 
 /**
- * Uploads an image to the 'images' Supabase Storage bucket.
+ * Uploads an image directly to the 'images' Supabase Storage bucket.
  * Automatically compresses the file first, generates a unique file path,
  * and returns the public CDN URL.
  */
 export const uploadImageToStorage = async (file: File, folder = 'general'): Promise<string> => {
-  if (!isSupabaseConfigured()) {
-    // Fallback for development preview before Supabase keys are pasted
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
-  }
-
   try {
     const compressedBlob = await compressImage(file);
     const cleanExt = file.type === 'image/svg+xml' ? 'svg' : 'jpg';
