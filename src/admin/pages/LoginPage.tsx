@@ -30,7 +30,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, onGoHome, lang 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLockedOut) return;
 
     setErrorMsg('');
 
@@ -124,7 +123,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, onGoHome, lang 
                 <input
                   type="text"
                   required
-                  disabled={isLockedOut || loading}
+                  disabled={loading}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="DAR AL DAWA"
@@ -147,7 +146,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, onGoHome, lang 
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  disabled={isLockedOut || loading}
+                  disabled={loading}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -157,7 +156,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, onGoHome, lang 
                 <button
                   type="button"
                   tabIndex={-1}
-                  disabled={isLockedOut}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer p-1"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
@@ -173,7 +171,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, onGoHome, lang 
                 <input
                   type="checkbox"
                   checked={rememberMe}
-                  disabled={isLockedOut}
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="rounded text-[#1E5AA8] focus:ring-[#1E5AA8] w-4 h-4 border-slate-300 cursor-pointer"
                 />
@@ -189,17 +186,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, onGoHome, lang 
             {/* Login Button */}
             <button
               type="submit"
-              disabled={loading || isLockedOut}
+              disabled={loading}
               className="w-full mt-2 py-3 px-4 rounded-xl bg-[#1E5AA8] hover:bg-[#154685] text-white font-bold text-sm shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>
                 {loading
                   ? (isUrdu ? 'لاگ ان ہو رہا ہے...' : 'Authenticating...')
-                  : isLockedOut
-                  ? (isUrdu ? `لاک ہے (${formatLockoutTime(lockoutRemainingSeconds)})` : `Locked (${formatLockoutTime(lockoutRemainingSeconds)})`)
                   : (isUrdu ? 'لاگ ان کریں' : 'Login to Admin Panel')}
               </span>
-              {!loading && !isLockedOut && <ArrowRight className={`w-4 h-4 ${isUrdu ? 'rotate-180' : ''}`} />}
+              {!loading && <ArrowRight className={`w-4 h-4 ${isUrdu ? 'rotate-180' : ''}`} />}
             </button>
           </form>
         </div>

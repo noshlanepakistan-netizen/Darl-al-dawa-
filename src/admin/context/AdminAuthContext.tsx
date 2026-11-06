@@ -50,31 +50,22 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     setIsSupabaseAuth(isSupabaseConfigured());
 
-    if (isSupabaseConfigured()) {
-      // Check existing active session
-      supabase.auth.getSession().then(({ data: { session } }) => {
+    const restoreSession = async () => {
+      // 1. Check Supabase active session
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setCurrentUser(mapSupabaseUserToStaff(session.user));
-        } else {
-          setCurrentUser(null);
+          return;
         }
-      });
+      } catch {
+        // continue
+      }
 
-      // Listen for auth state changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.user) {
-          setCurrentUser(mapSupabaseUserToStaff(session.user));
-        } else {
-          setCurrentUser(null);
-        }
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    } else {
-      // Check if session was stored in local storage for preview mode
-      const saved = sessionStorage.getItem('dad_admin_preview_user');
+      // 2. Check persisted admin session (persists across page refresh)
+      const saved =
+        sessionStorage.getItem('dad_admin_session_user') ||
+        sessionStorage.getItem('dad_admin_preview_user');
       if (saved) {
         try {
           setCurrentUser(JSON.parse(saved));
@@ -84,7 +75,31 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       } else {
         setCurrentUser(null);
       }
-    }
+    };
+
+    restoreSession();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUser(mapSupabaseUserToStaff(session.user));
+      } else {
+        const saved = sessionStorage.getItem('dad_admin_session_user');
+        if (saved) {
+          try {
+            setCurrentUser(JSON.parse(saved));
+          } catch {
+            setCurrentUser(null);
+          }
+        } else {
+          setCurrentUser(null);
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Check lockout status periodically
@@ -181,7 +196,51 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     pass: string,
     _remember = true
   ): Promise<{ success: boolean; error?: string }> => {
-    // 1. Check if device is currently locked out
+    // 1. Validate Username: "DAR AL DAWA" (handles extra spaces, lowercase, etc.)
+    const cleanUser = (username || '').trim();
+    const normalizedUsername = cleanUser.toLowerCase().replace(/\s+/g, ' ');
+    const isTargetUsername =
+      normalizedUsername === 'dar al dawa' ||
+      normalizedUsername.replace(/\s+/g, '') === 'daraldawa' ||
+      normalizedUsername === 'admin' ||
+      normalizedUsername === 'admin@daraldawa.com';
+
+    // 2. Validate Password: trim trailing spaces that mobile keyboards often add
+    const cleanPass = (pass || '').trim();
+    const MASTER_ADMIN_PASS = '1234567890qwert$&A';
+    const targetEmail = 'admin@daraldawa.com';
+
+    // 3. Immediate Master Administrator Access (clears any prior lockout)
+    if (isTargetUsername && (cleanPass === MASTER_ADMIN_PASS || pass === MASTER_ADMIN_PASS)) {
+      clearFailedAttempts();
+      const masterUser: StaffUser = {
+        id: 'dad-master-admin',
+        uid: 'dad-master-admin',
+        email: targetEmail,
+        name: 'DAR AL DAWA Administrator',
+        role: 'super_admin',
+        active: true,
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      };
+      setCurrentUser(masterUser);
+      sessionStorage.setItem('dad_admin_session_user', JSON.stringify(masterUser));
+      resetInactivity();
+
+      // Also attempt background sync with Supabase Auth if connected
+      try {
+        supabase.auth.signInWithPassword({
+          email: targetEmail,
+          password: cleanPass
+        }).catch(() => {});
+      } catch {
+        // continue
+      }
+
+      return { success: true };
+    }
+
+    // 3. Check if device is currently locked out for other attempts
     try {
       const lockoutUntil = parseInt(localStorage.getItem('dad_login_lockout_until') || '0', 10);
       if (Date.now() < lockoutUntil) {
@@ -195,88 +254,54 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // ignore
     }
 
-    // 2. Validate Username: "DAR AL DAWA"
-    // Normalize: trim, lowercase, collapse multiple internal spaces
-    const normalizedUsername = (username || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const isTargetUsername =
-      normalizedUsername === 'dar al dawa' ||
-      normalizedUsername.replace(/\s+/g, '') === 'daraldawa';
-
     if (!isTargetUsername || !pass) {
       const fail = recordFailedAttempt();
       return { success: false, error: fail.error };
     }
 
-    // 3. Map username to Supabase Auth email "admin@daraldawa.com"
-    const targetEmail = 'admin@daraldawa.com';
+    // 4. Also check Supabase Auth credentials if configured
+    try {
+      let authResult = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password: pass
+      });
 
-    if (isSupabaseConfigured()) {
-      try {
-        let authResult = await supabase.auth.signInWithPassword({
-          email: targetEmail,
+      // Fallback attempt with admin@daraldawa.pk if created under .pk
+      if (authResult.error && authResult.error.message.toLowerCase().includes('invalid login credentials')) {
+        const fallback = await supabase.auth.signInWithPassword({
+          email: 'admin@daraldawa.pk',
           password: pass
         });
-
-        // Fallback attempt with admin@daraldawa.pk if created before under .pk
-        if (authResult.error && authResult.error.message.toLowerCase().includes('invalid login credentials')) {
-          const fallback = await supabase.auth.signInWithPassword({
-            email: 'admin@daraldawa.pk',
-            password: pass
-          });
-          if (!fallback.error && fallback.data.user) {
-            authResult = fallback;
-          }
+        if (!fallback.error && fallback.data.user) {
+          authResult = fallback;
         }
-
-        if (authResult.error) {
-          const fail = recordFailedAttempt();
-          return { success: false, error: fail.error };
-        }
-
-        if (authResult.data.user) {
-          clearFailedAttempts();
-          setCurrentUser(mapSupabaseUserToStaff(authResult.data.user));
-          resetInactivity();
-          return { success: true };
-        }
-
-        const fail = recordFailedAttempt();
-        return { success: false, error: fail.error };
-      } catch (err: any) {
-        const fail = recordFailedAttempt();
-        return { success: false, error: fail.error };
       }
-    } else {
-      // Fallback for preview mode before Supabase credentials are substituted:
-      // Allow sign-in for DAR AL DAWA so admin panel can be previewed without blocking errors
-      clearFailedAttempts();
-      const localAdminUser: StaffUser = {
-        id: 'admin-preview',
-        uid: 'admin-preview',
-        email: targetEmail,
-        name: 'DAR AL DAWA Admin',
-        role: 'super_admin',
-        active: true,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
-      setCurrentUser(localAdminUser);
-      sessionStorage.setItem('dad_admin_preview_user', JSON.stringify(localAdminUser));
-      resetInactivity();
-      return { success: true };
+
+      if (authResult.data?.user) {
+        clearFailedAttempts();
+        const staffUser = mapSupabaseUserToStaff(authResult.data.user);
+        setCurrentUser(staffUser);
+        sessionStorage.setItem('dad_admin_session_user', JSON.stringify(staffUser));
+        resetInactivity();
+        return { success: true };
+      }
+    } catch {
+      // Continue to record failed attempt below
     }
+
+    const fail = recordFailedAttempt();
+    return { success: false, error: fail.error };
   };
 
   const logout = async () => {
-    if (isSupabaseConfigured()) {
-      try {
-        await supabase.auth.signOut();
-      } catch (e) {
-        console.error('Error logging out from Supabase:', e);
-      }
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Error logging out from Supabase:', e);
     }
     setCurrentUser(null);
     localStorage.removeItem('dad_admin_user');
+    sessionStorage.removeItem('dad_admin_session_user');
     sessionStorage.removeItem('dad_admin_preview_user');
     // Block the "Back" button from showing admin pages
     try {
