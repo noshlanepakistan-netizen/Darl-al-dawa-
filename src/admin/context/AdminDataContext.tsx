@@ -152,8 +152,9 @@ interface AdminDataContextType {
 
   // Patients
   patients: PatientRecord[];
-  addPatient: (pat: Omit<PatientRecord, 'id' | 'createdAt'>) => string;
-  updatePatient: (id: string, pat: Partial<PatientRecord>) => void;
+  addPatient: (pat: Omit<PatientRecord, 'id' | 'createdAt'>) => Promise<string>;
+  updatePatient: (id: string, pat: Partial<PatientRecord>) => Promise<void>;
+  togglePatientBlock: (id: string, blocked: boolean) => Promise<void>;
 
   // Lab Reports
   labReports: LabReportRecord[];
@@ -491,6 +492,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           apptsData.map((a: any) => ({
             id: a.id,
             token: a.token,
+            patientId: a.patient_id,
             patientName: a.patient_name,
             phone: a.phone,
             cnic: a.cnic,
@@ -615,6 +617,27 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             read: m.read ?? false,
             important: m.important ?? false,
             createdAt: m.created_at
+          }))
+        );
+      }
+
+      // 13. Patients Registry
+      const { data: patsData } = await supabase.from('patients').select('*').order('created_at', { ascending: false });
+      if (patsData && patsData.length > 0) {
+        setPatients(
+          patsData.map((p: any) => ({
+            id: p.id,
+            name: p.full_name || p.name || 'Patient',
+            phone: p.phone || '',
+            email: p.email,
+            cnic: p.cnic,
+            age: p.age,
+            gender: p.gender || 'Male',
+            address: p.address || p.city || 'Lahore',
+            bloodGroup: p.blood_group,
+            allergies: p.allergies,
+            isBlocked: p.is_blocked ?? false,
+            createdAt: p.created_at || new Date().toISOString()
           }))
         );
       }
@@ -965,6 +988,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       supabase.from('appointments').insert({
         id: newApp.id,
         token: newApp.token,
+        patient_id: newApp.patientId || null,
         patient_name: newApp.patientName,
         phone: newApp.phone,
         cnic: newApp.cnic || null,
@@ -979,6 +1003,33 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }).then(({ error }) => {
         if (error) {
           console.error('Failed to insert appointment into Supabase:', error);
+        } else {
+          // Trigger in-app notifications
+          const notifs: any[] = [
+            {
+              user_id: 'admin',
+              role: 'admin',
+              title: 'New Appointment Booked',
+              message: `${newApp.patientName} (${newApp.phone}) booked token ${newApp.token} for ${newApp.appointmentDate}.`,
+              type: 'appointment_booked',
+              read: false,
+              created_at: new Date().toISOString()
+            }
+          ];
+
+          if (newApp.patientId) {
+            notifs.push({
+              user_id: newApp.patientId,
+              role: 'patient',
+              title: 'Appointment Request Received',
+              message: `Your appointment token ${newApp.token} for ${newApp.appointmentDate} (${newApp.timeSlot}) is pending confirmation.`,
+              type: 'appointment_booked',
+              read: false,
+              created_at: new Date().toISOString()
+            });
+          }
+
+          supabase.from('notifications').insert(notifs).then(() => {}, () => {});
         }
       });
     }
@@ -1550,18 +1601,88 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // Patients
-  const addPatient = (pat: Omit<PatientRecord, 'id' | 'createdAt'>): string => {
+  const addPatient = async (pat: Omit<PatientRecord, 'id' | 'createdAt'>): Promise<string> => {
     const id = `pat-${Date.now()}`;
     const createdAt = new Date().toISOString();
-    const newPat = { ...pat, id, createdAt };
-    setPatients((prev) => [newPat, ...prev]);
-    showToast(`Patient ${pat.name} registered!`);
-    return id;
+    const newPat = { ...pat, id, createdAt, isBlocked: false };
+
+    try {
+      const { data, error } = await supabase.from('patients').insert({
+        id: newPat.id,
+        full_name: newPat.name,
+        name: newPat.name,
+        phone: newPat.phone,
+        email: newPat.email || null,
+        cnic: newPat.cnic || null,
+        age: newPat.age || null,
+        gender: newPat.gender || 'Male',
+        address: newPat.address || null,
+        city: newPat.address || 'Lahore',
+        blood_group: newPat.bloodGroup || null,
+        allergies: newPat.allergies || null,
+        is_blocked: false,
+        created_at: newPat.createdAt
+      }).select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Registered Patient', 'Patients', `Patient ${pat.name} registered.`);
+      return id;
+    } catch (err: any) {
+      console.error('Failed to add patient to Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
+      return id;
+    }
   };
 
-  const updatePatient = (id: string, patUpdate: Partial<PatientRecord>) => {
-    setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, ...patUpdate } : p)));
-    showToast('Patient record updated');
+  const updatePatient = async (id: string, patUpdate: Partial<PatientRecord>) => {
+    try {
+      const payload: any = { updated_at: new Date().toISOString() };
+      if (patUpdate.name !== undefined) {
+        payload.full_name = patUpdate.name;
+        payload.name = patUpdate.name;
+      }
+      if (patUpdate.phone !== undefined) payload.phone = patUpdate.phone;
+      if (patUpdate.email !== undefined) payload.email = patUpdate.email;
+      if (patUpdate.cnic !== undefined) payload.cnic = patUpdate.cnic;
+      if (patUpdate.age !== undefined) payload.age = patUpdate.age;
+      if (patUpdate.gender !== undefined) payload.gender = patUpdate.gender;
+      if (patUpdate.address !== undefined) {
+        payload.address = patUpdate.address;
+        payload.city = patUpdate.address;
+      }
+      if (patUpdate.bloodGroup !== undefined) payload.blood_group = patUpdate.bloodGroup;
+      if (patUpdate.allergies !== undefined) payload.allergies = patUpdate.allergies;
+      if (patUpdate.isBlocked !== undefined) payload.is_blocked = patUpdate.isBlocked;
+
+      const { data, error } = await supabase.from('patients').update(payload).eq('id', id).select();
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast('Saved to database ✓', 'success');
+      logAction('Updated Patient Record', 'Patients', `Updated record for patient ${id}.`);
+    } catch (err: any) {
+      console.error('Failed to update patient in Supabase:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
+    }
+  };
+
+  const togglePatientBlock = async (id: string, blocked: boolean) => {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .update({ is_blocked: blocked, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select();
+
+      if (error || !data || data.length === 0) throw error || new Error('Write unconfirmed');
+      await fetchSupabaseData();
+      showToast(`Patient ${blocked ? 'blocked' : 'unblocked'} successfully ✓`, 'success');
+      logAction('Patient Status Changed', 'Patients', `Patient ${id} ${blocked ? 'blocked' : 'unblocked'}.`);
+    } catch (err: any) {
+      console.error('Failed to update patient block status:', err);
+      showToast('Not connected to database — changes NOT saved', 'error');
+    }
   };
 
   // Lab Reports
@@ -1995,6 +2116,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         patients,
         addPatient,
         updatePatient,
+        togglePatientBlock,
         labReports,
         addLabReport,
         updateLabReport,

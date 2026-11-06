@@ -37,8 +37,15 @@ import {
   Database,
   UploadCloud,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Bell,
+  Send,
+  Volume2,
+  VolumeX,
+  Smartphone
 } from 'lucide-react';
+import { useNotifications } from '../../context/NotificationContext';
+import { requestPushPermission, ONESIGNAL_APP_ID } from '../../utils/oneSignal';
 import { ImageUploadField, MultipleImageUploadField } from '../components/ImageUploadField';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Doctor, Department, ServiceFacility, GalleryItem, Testimonial, FAQItem } from '../../data/hospitalData';
@@ -55,7 +62,8 @@ type SettingsTab =
   | 'doctors'
   | 'appointments'
   | 'content'
-  | 'security';
+  | 'security'
+  | 'notifications';
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   const isUrdu = lang === 'ur';
@@ -100,6 +108,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   } = useAdminData();
 
   const { currentUser, updateProfile, changePassword, logout } = useAdminAuth();
+  const { notificationSettings, updateNotificationSettings, sendTestNotification } = useNotifications();
+  const [pushPermissionState, setPushPermissionState] = useState<string | null>(null);
+  const [isSendingTestNotif, setIsSendingTestNotif] = useState(false);
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -973,6 +984,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
         >
           <Shield className="w-4 h-4" />
           <span>Account & Security</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('notifications')}
+          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-semibold text-xs whitespace-nowrap transition-all cursor-pointer ${
+            activeTab === 'notifications'
+              ? 'bg-teal-700 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          <span>Notifications</span>
         </button>
       </div>
 
@@ -2226,6 +2250,265 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
               <LogOut className="w-4 h-4" />
               <span>Log Out Admin Session</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          TAB H: NOTIFICATION SETTINGS & ONESIGNAL PUSH
+         ======================================================== */}
+      {activeTab === 'notifications' && (
+        <div className="space-y-6">
+          {/* Top Info Banner */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Hospital Notification Preferences</h2>
+                  <p className="text-xs text-slate-500">
+                    Configure real-time in-app alerts, audio chime, and Web Push notifications.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSendingTestNotif}
+                  onClick={async () => {
+                    setIsSendingTestNotif(true);
+                    await sendTestNotification('admin');
+                    showToast('Test notification dispatched with audio chime ✓');
+                    setIsSendingTestNotif(false);
+                  }}
+                  className="px-4 py-2 bg-[#2E9E5B] hover:bg-[#25824b] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSendingTestNotif ? 'Sending Test...' : 'Send Test Notification'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Notification Toggles */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              
+              {/* Appointment Booked */}
+              <div className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/60 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-900 block text-xs">New Appointment Booked</span>
+                  <span className="text-[11px] text-slate-500">
+                    Alert administrative staff whenever a patient books an OPD slot online.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateNotificationSettings({ appointmentBooked: !notificationSettings.appointmentBooked })
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notificationSettings.appointmentBooked ? 'bg-teal-700' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`block w-4 h-4 rounded-full bg-white shadow-xs transition-transform transform ${
+                      notificationSettings.appointmentBooked ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Appointment Cancelled */}
+              <div className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/60 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-900 block text-xs">Appointment Cancelled</span>
+                  <span className="text-[11px] text-slate-500">
+                    Notify reception immediately if a patient cancels their pending token.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateNotificationSettings({ appointmentCancelled: !notificationSettings.appointmentCancelled })
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notificationSettings.appointmentCancelled ? 'bg-teal-700' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`block w-4 h-4 rounded-full bg-white shadow-xs transition-transform transform ${
+                      notificationSettings.appointmentCancelled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Patient Registered */}
+              <div className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/60 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-900 block text-xs">New Patient Registration</span>
+                  <span className="text-[11px] text-slate-500">
+                    Alert when a patient signs up for an online portal account.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateNotificationSettings({ patientRegistered: !notificationSettings.patientRegistered })
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notificationSettings.patientRegistered ? 'bg-teal-700' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`block w-4 h-4 rounded-full bg-white shadow-xs transition-transform transform ${
+                      notificationSettings.patientRegistered ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Profile Updated */}
+              <div className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/60 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-900 block text-xs">Patient Profile Updates</span>
+                  <span className="text-[11px] text-slate-500">
+                    Alert when a patient updates their mobile phone or residential address.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateNotificationSettings({ profileUpdated: !notificationSettings.profileUpdated })
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notificationSettings.profileUpdated ? 'bg-teal-700' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`block w-4 h-4 rounded-full bg-white shadow-xs transition-transform transform ${
+                      notificationSettings.profileUpdated ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Contact Messages */}
+              <div className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/60 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-900 block text-xs">Public Contact Inquiries</span>
+                  <span className="text-[11px] text-slate-500">
+                    Notify when a visitor submits a contact form message.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateNotificationSettings({ contactMessage: !notificationSettings.contactMessage })
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notificationSettings.contactMessage ? 'bg-teal-700' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`block w-4 h-4 rounded-full bg-white shadow-xs transition-transform transform ${
+                      notificationSettings.contactMessage ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Audio Chime */}
+              <div className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/60 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {notificationSettings.soundEnabled ? (
+                    <Volume2 className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <VolumeX className="w-4 h-4 text-slate-400" />
+                  )}
+                  <div>
+                    <span className="font-bold text-slate-900 block text-xs">Audio Chime On Incoming Alert</span>
+                    <span className="text-[11px] text-slate-500">
+                      Plays a pleasant hospital chime when new appointments or alerts arrive.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateNotificationSettings({ soundEnabled: !notificationSettings.soundEnabled })
+                  }
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                    notificationSettings.soundEnabled ? 'bg-teal-700' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`block w-4 h-4 rounded-full bg-white shadow-xs transition-transform transform ${
+                      notificationSettings.soundEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+            </div>
+
+            {/* OneSignal Web Push Integration Info */}
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-teal-400">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">OneSignal Web Push Integration</h3>
+                    <p className="text-xs text-slate-300">
+                      Deliver real-time push notifications to admin laptops and patient mobile devices.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const granted = await requestPushPermission();
+                    if (granted) {
+                      setPushPermissionState('Push notifications allowed for this browser ✓');
+                      showToast('Browser push notifications enabled!');
+                    } else {
+                      setPushPermissionState('Permission not granted or blocked by browser.');
+                      showToast('Push permission not granted', 'error');
+                    }
+                  }}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer self-start sm:self-auto"
+                >
+                  Enable Push On This Device
+                </button>
+              </div>
+
+              {pushPermissionState && (
+                <div className="p-2.5 rounded-lg bg-white/10 text-emerald-300 text-xs font-mono">
+                  {pushPermissionState}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs text-slate-300 border-t border-white/10">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">OneSignal App ID:</span>
+                  <span className="font-mono text-white text-[11px] truncate block">
+                    {ONESIGNAL_APP_ID}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Worker Status:</span>
+                  <span className="font-mono text-emerald-400 text-[11px] block">
+                    /OneSignalSDKWorker.js Active ✓
+                  </span>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

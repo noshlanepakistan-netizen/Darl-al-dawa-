@@ -24,6 +24,9 @@ import { ReportDownloadModal } from './components/ReportDownloadModal';
 import { ToastContainer } from './admin/components/ToastContainer';
 import { useAdminAuth } from './admin/context/AdminAuthContext';
 import { useAdminData } from './admin/context/AdminDataContext';
+import { usePatientAuth } from './context/PatientAuthContext';
+import { PatientAuthModal } from './components/patient/PatientAuthModal';
+import { PatientDashboardModal } from './components/patient/PatientDashboardModal';
 import { AdminLayout } from './admin/components/AdminLayout';
 import { LoginPage } from './admin/pages/LoginPage';
 import { DashboardPage } from './admin/pages/DashboardPage';
@@ -45,9 +48,12 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'website' | 'admin'>('website');
   const [adminModule, setAdminModule] = useState<string>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isPatientAuthOpen, setIsPatientAuthOpen] = useState(false);
+  const [isPatientDashboardOpen, setIsPatientDashboardOpen] = useState(false);
 
-  const { isAuthenticated } = useAdminAuth();
-  const { homepageSettings, isLoading } = useAdminData();
+  const { isAuthenticated: isAdminAuthenticated } = useAdminAuth();
+  const { homepageSettings, isLoading, showToast } = useAdminData();
+  const { patient, isAuthenticated: isPatientAuthenticated } = usePatientAuth();
 
   const secVis = homepageSettings?.sectionsVisibility || {
     hero: true,
@@ -85,6 +91,21 @@ export default function App() {
         path.includes('/admin') ||
         path.includes('/staff')
       ) {
+        if (isPatientAuthenticated && patient) {
+          showToast(
+            lang === 'ur'
+              ? 'رسائی مسترد: مریض پورٹل صارف اسٹاف ایڈمن پورٹل تک رسائی کا مجاز نہیں ہے۔'
+              : 'Access Denied: Patient accounts are not authorized to access the Staff Admin Portal.',
+            'error'
+          );
+          try {
+            window.history.replaceState(null, '', window.location.pathname);
+          } catch {
+            window.location.hash = '';
+          }
+          setViewMode('website');
+          return;
+        }
         setViewMode('admin');
       }
     };
@@ -97,7 +118,7 @@ export default function App() {
       window.removeEventListener('hashchange', checkAdminRoute);
       window.removeEventListener('popstate', checkAdminRoute);
     };
-  }, []);
+  }, [isPatientAuthenticated, patient, lang, showToast]);
 
   // Handle RTL vs LTR attribute on <html> element
   useEffect(() => {
@@ -110,6 +131,15 @@ export default function App() {
   };
 
   const handleOpenAdmin = () => {
+    if (isPatientAuthenticated && patient) {
+      showToast(
+        lang === 'ur'
+          ? 'رسائی مسترد: مریض پورٹل صارف اسٹاف ایڈمن پورٹل تک رسائی کا مجاز نہیں ہے۔'
+          : 'Access Denied: Patient accounts are not authorized to access the Staff Admin Portal.',
+        'error'
+      );
+      return;
+    }
     setViewMode('admin');
     window.location.hash = 'admin';
   };
@@ -226,7 +256,7 @@ export default function App() {
     return (
       <div className={`min-h-screen bg-[#F7FAFC] text-[#1F2933] ${lang === 'ur' ? 'font-urdu' : 'font-body'}`}>
         <ToastContainer />
-        {!isAuthenticated ? (
+        {!isAdminAuthenticated ? (
           <LoginPage
             onSuccess={() => setViewMode('admin')}
             onGoHome={handleGoHome}
@@ -247,16 +277,7 @@ export default function App() {
     );
   }
 
-  // Public Hospital Website with exact section order:
-  // 1) Header / Navbar
-  // 2) Hero section
-  // 3) Appointment Booking Form
-  // 4) Departments section
-  // 5) Doctor Profiles section
-  // 6) All remaining sections (Services, About, Packages, Testimonials, Gallery, Blog, FAQs, Contact)
-  // 7) Footer
-
-
+  // Public Hospital Website
   return (
     <div className={`min-h-screen bg-[#F7FAFC] text-[#1F2933] ${lang === 'ur' ? 'font-urdu' : 'font-body'}`}>
       {isLoading && (
@@ -273,11 +294,28 @@ export default function App() {
         lang={lang}
       />
 
+      {/* Patient Auth Modal (Sign In / Register / Forgot Password) */}
+      <PatientAuthModal
+        isOpen={isPatientAuthOpen}
+        onClose={() => setIsPatientAuthOpen(false)}
+        lang={lang}
+      />
+
+      {/* Patient Dashboard Modal ("My Account") */}
+      <PatientDashboardModal
+        isOpen={isPatientDashboardOpen}
+        onClose={() => setIsPatientDashboardOpen(false)}
+        lang={lang}
+        onNavigateToBooking={scrollToAppointment}
+      />
+
       {/* 1. Header / Navbar */}
       <HeaderTopBar
         lang={lang}
         onOpenReportsModal={() => setIsReportModalOpen(true)}
         onGoToAdmin={handleOpenAdmin}
+        onOpenPatientAuth={() => setIsPatientAuthOpen(true)}
+        onOpenPatientDashboard={() => setIsPatientDashboardOpen(true)}
       />
       <Navbar
         lang={lang}
@@ -285,6 +323,8 @@ export default function App() {
         onNavigateToAppointment={scrollToAppointment}
         onOpenReportsModal={() => setIsReportModalOpen(true)}
         onGoToAdmin={handleOpenAdmin}
+        onOpenPatientAuth={() => setIsPatientAuthOpen(true)}
+        onOpenPatientDashboard={() => setIsPatientDashboardOpen(true)}
       />
 
       <main>

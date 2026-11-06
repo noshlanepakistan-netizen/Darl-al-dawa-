@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { usePatientAuth } from '../context/PatientAuthContext';
+import { tagGuestDevice } from '../utils/oneSignal';
 import { formatWhatsAppLink } from '../utils/phoneUtils';
 
 interface AppointmentSectionProps {
@@ -37,13 +39,14 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   const t = UI_TRANSLATIONS[lang].appointment;
   const isUrdu = lang === 'ur';
   const { addAppointment, departments: liveDepts, doctors: liveDocs, hospitalConfig } = useAdminData();
+  const { patient, isAuthenticated } = usePatientAuth();
 
   const deptsList = liveDepts || [];
   const docsList = liveDocs || [];
 
-  // Form states
-  const [patientName, setPatientName] = useState(prefillName);
-  const [phone, setPhone] = useState(prefillPhone);
+  // Form states - prefill from patient if logged in
+  const [patientName, setPatientName] = useState(prefillName || (patient?.fullName || ''));
+  const [phone, setPhone] = useState(prefillPhone || (patient?.phone || ''));
   const [cnic, setCnic] = useState('');
   const [departmentId, setDepartmentId] = useState(preselectedDeptId || (deptsList[0]?.id || 'cardiology'));
   const [doctorId, setDoctorId] = useState(preselectedDoctorId || '');
@@ -56,6 +59,14 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   const [timeSlot, setTimeSlot] = useState('evening');
   const [patientType, setPatientType] = useState<'new' | 'followup'>('new');
   const [notes, setNotes] = useState('');
+
+  // Auto-fill if patient logs in afterwards
+  useEffect(() => {
+    if (isAuthenticated && patient) {
+      if (!patientName) setPatientName(patient.fullName);
+      if (!phone) setPhone(patient.phone);
+    }
+  }, [isAuthenticated, patient]);
 
   // UI state
   const [errors, setErrors] = useState<Record<string, string>>({});

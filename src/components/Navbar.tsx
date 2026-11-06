@@ -7,11 +7,15 @@ import {
   ChevronRight,
   ChevronDown,
   FileText,
-  Shield
+  Shield,
+  User,
+  Bell
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { usePatientAuth } from '../context/PatientAuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
 
 
@@ -35,6 +39,8 @@ interface NavbarProps {
   onNavigateToAppointment: (deptId?: string, doctorId?: string) => void;
   onOpenReportsModal?: () => void;
   onGoToAdmin?: () => void;
+  onOpenPatientAuth?: () => void;
+  onOpenPatientDashboard?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,9 +48,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleLang,
   onNavigateToAppointment,
   onOpenReportsModal,
-  onGoToAdmin
+  onGoToAdmin,
+  onOpenPatientAuth,
+  onOpenPatientDashboard
 }) => {
   const { hospitalConfig } = useAdminData();
+  const { patient, isAuthenticated } = usePatientAuth();
+  const { unreadCount } = useNotifications();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
@@ -311,6 +321,32 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
+          {/* Patient Account Button (Desktop) */}
+          {isAuthenticated && patient ? (
+            <button
+              onClick={onOpenPatientDashboard}
+              type="button"
+              className="relative inline-flex items-center gap-1.5 px-3 py-1.5 xl:py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E5AA8] border border-blue-200 font-bold text-xs transition-all whitespace-nowrap shrink-0 shadow-xs active:scale-95 cursor-pointer"
+              title={isUrdu ? "مریض اکاؤنٹ" : "Patient Account"}
+            >
+              <User className="w-3.5 h-3.5 text-[#1E5AA8] shrink-0" />
+              <span className="truncate max-w-[95px]">{patient.fullName ? patient.fullName.split(' ')[0] : 'Account'}</span>
+              {unreadCount > 0 && (
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={onOpenPatientAuth}
+              type="button"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 xl:py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+              title={isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register"}
+            >
+              <User className="w-3.5 h-3.5 text-[#1E5AA8] shrink-0" />
+              <span>{isUrdu ? 'لاگ ان' : 'Sign In'}</span>
+            </button>
+          )}
+
           {/* Language Toggle */}
           <button
             onClick={onToggleLang}
@@ -323,8 +359,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Mobile Header Controls: WhatsApp, Language Toggle, and Three Lines Menu */}
+        {/* Mobile Header Controls: Patient User, WhatsApp, Language Toggle, and Three Lines Menu */}
         <div className="flex items-center gap-1 min-[360px]:gap-1.5 lg:hidden shrink-0">
+          {/* Mobile Patient Profile/Login Shortcut */}
+          <button
+            onClick={isAuthenticated ? onOpenPatientDashboard : onOpenPatientAuth}
+            type="button"
+            className="relative flex items-center justify-center p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E5AA8] border border-blue-200 active:scale-95 transition-all shrink-0 shadow-2xs cursor-pointer"
+            title={isAuthenticated ? (isUrdu ? "مریض اکاؤنٹ" : "My Account") : (isUrdu ? "لاگ ان" : "Patient Login")}
+            aria-label="Patient Account"
+          >
+            <User className="w-4 h-4 text-[#1E5AA8]" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-1 ring-white" />
+            )}
+          </button>
+
           {/* Mobile Direct WhatsApp Button */}
           <a
             href={whatsappHref}
@@ -393,6 +443,40 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           <div className="pt-3 border-t border-slate-100 space-y-2">
+            {/* Patient Account Action in Mobile Menu */}
+            {isAuthenticated && patient ? (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onOpenPatientDashboard) onOpenPatientDashboard();
+                }}
+                type="button"
+                className="w-full flex items-center justify-between py-2.5 px-4 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1E5AA8] font-bold text-sm shadow-xs transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  <span>{patient.fullName ? `${patient.fullName} (${isUrdu ? 'اکاؤنٹ' : 'My Account'})` : 'My Account'}</span>
+                </div>
+                {unreadCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-red-500 text-white font-bold">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (onOpenPatientAuth) onOpenPatientAuth();
+                }}
+                type="button"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#1E5AA8] hover:bg-[#154685] text-white font-bold text-sm shadow-xs transition-colors cursor-pointer"
+              >
+                <User className="w-4 h-4" />
+                <span className={isUrdu ? 'font-urdu text-base' : ''}>{isUrdu ? 'مریض لاگ ان / نیا اکاؤنٹ' : 'Patient Login / Sign Up'}</span>
+              </button>
+            )}
+
             {/* WhatsApp Contact in Mobile Menu */}
             <a
               href={whatsappHref}
@@ -411,7 +495,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onNavigateToAppointment();
               }}
               type="button"
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#1E5AA8] hover:bg-[#154685] text-white font-bold text-sm shadow-xs transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-sm shadow-xs transition-colors cursor-pointer"
             >
               <CalendarCheck className="w-4 h-4" />
               <span className={isUrdu ? 'font-urdu text-base' : ''}>{t.bookBtn}</span>

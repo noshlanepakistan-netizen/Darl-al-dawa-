@@ -19,6 +19,7 @@ export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancell
 export interface AdminAppointment {
   id: string;
   token: string;
+  patientId?: string;
   patientName: string;
   phone: string;
   cnic?: string;
@@ -37,12 +38,14 @@ export interface PatientRecord {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   cnic?: string;
   age?: number;
   gender?: 'Male' | 'Female' | 'Other';
   address?: string;
   bloodGroup?: string;
   allergies?: string;
+  isBlocked?: boolean;
   visitHistory?: {
     date: string;
     doctorName: string;

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { useAdminData } from '../context/AdminDataContext';
+import { useNotifications } from '../../context/NotificationContext';
+import { tagAdminDevice } from '../../utils/oneSignal';
 import { Logo } from '../../components/Logo';
 import {
   LayoutDashboard,
@@ -23,8 +25,11 @@ import {
   ChevronDown,
   ExternalLink,
   Clock,
-  Activity
+  Activity,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
+import { isSupabaseConfigured } from '../../supabase/config';
 import { StaffRole } from '../types';
 
 interface AdminLayoutProps {
@@ -46,7 +51,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 }) => {
   const { currentUser, logout, canAccess, inactivityRemainingSeconds } = useAdminAuth();
   const { appointments, messages, labReports } = useAdminData();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, sendTestNotification } = useNotifications();
   const isUrdu = lang === 'ur';
+
+  // Tag device as admin for push notifications
+  useEffect(() => {
+    tagAdminDevice();
+  }, []);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -317,53 +328,96 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               <button
                 type="button"
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+                className="relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 aria-label="View notifications"
               >
                 <Bell className="w-5 h-5" />
-                {pendingAppointmentsCount + unreadMessagesCount > 0 && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#D62828] ring-2 ring-white" />
-                )}
+                {unreadCount > 0 ? (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-[#D62828] text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white animate-pulse">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                ) : (pendingAppointmentsCount + unreadMessagesCount > 0 ? (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white" />
+                ) : null)}
               </button>
 
               {/* Notification dropdown */}
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
-                    <span className="text-xs font-bold text-slate-900">Recent Alerts & Requests</span>
-                    <span className="text-[10px] text-slate-400">Live Hospital Feed</span>
+                <div className="absolute right-0 mt-2 w-84 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-2.5">
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 block">Live Hospital Notifications</span>
+                      <span className="text-[10px] text-slate-400">Appointments, Registrations & Alerts</span>
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => markAllAsRead()}
+                        className="text-[11px] font-semibold text-[#1E5AA8] hover:underline cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
                   </div>
 
-                  <div className="space-y-2 max-h-64 overflow-y-auto text-xs">
-                    {appointments.slice(0, 3).map((a) => (
-                      <div
-                        key={a.id}
-                        onClick={() => {
-                          onSelectModule('appointments');
-                          setShowNotifications(false);
-                        }}
-                        className="p-2 rounded-xl bg-slate-50 hover:bg-blue-50 cursor-pointer transition-colors border border-slate-100"
-                      >
-                        <div className="font-semibold text-slate-800">{a.patientName}</div>
-                        <div className="text-[11px] text-slate-500">
-                          {a.token} • {a.appointmentDate} ({a.status})
+                  <div className="space-y-2 max-h-72 overflow-y-auto text-xs">
+                    {notifications.length === 0 ? (
+                      <div className="text-center py-6 text-slate-400 text-xs">
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      notifications.slice(0, 8).map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => {
+                            markAsRead(n.id);
+                            if (n.type.includes('appointment')) onSelectModule('appointments');
+                            else if (n.type.includes('patient')) onSelectModule('patients');
+                            else if (n.type.includes('message')) onSelectModule('messages');
+                            setShowNotifications(false);
+                          }}
+                          className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
+                            n.read
+                              ? 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                              : 'bg-blue-50/80 border-blue-200 hover:bg-blue-100/80'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-900 text-[11px] truncate">{n.title}</span>
+                            <span className="text-[9px] text-slate-400 font-mono shrink-0">
+                              {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-snug">
+                            {n.message}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
+                  </div>
 
-                    {messages.slice(0, 2).map((m) => (
-                      <div
-                        key={m.id}
-                        onClick={() => {
-                          onSelectModule('messages');
-                          setShowNotifications(false);
-                        }}
-                        className="p-2 rounded-xl bg-slate-50 hover:bg-blue-50 cursor-pointer transition-colors border border-slate-100"
-                      >
-                        <div className="font-semibold text-slate-800">{m.name}</div>
-                        <div className="text-[11px] text-slate-500 truncate">{m.subject}</div>
-                      </div>
-                    ))}
+                  <div className="pt-2.5 mt-2 border-t border-slate-100 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sendTestNotification('admin');
+                      }}
+                      className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Bell className="w-3 h-3 text-emerald-600" />
+                      <span>Test Audio & Push Chime</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectModule('settings');
+                        setShowNotifications(false);
+                      }}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                    >
+                      Settings
+                    </button>
                   </div>
                 </div>
               )}
@@ -445,6 +499,27 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 Session will expire in {Math.floor(inactivityRemainingSeconds / 60)}m {inactivityRemainingSeconds % 60}s due to inactivity. Move mouse or click to stay logged in.
               </span>
             </div>
+          </div>
+        )}
+
+        {/* Unconfigured Supabase warning banner */}
+        {!isSupabaseConfigured() && currentModule !== 'system_check' && (
+          <div className="bg-gradient-to-r from-rose-600 to-rose-700 text-white px-4 py-2.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2 font-medium">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>
+                {isUrdu
+                  ? 'توجہ: سپابیس کلاؤڈ ڈیٹا بیس ابھی منسلک نہیں ہے۔ تمام ڈیوائسز پر لائیو ڈیٹا سنک کرنے کے لیے اپنا URL اور Anon Key جوڑیں۔'
+                  : 'Notice: Live Supabase database is not connected. Connect your Supabase Project URL & Anon Key for instant multi-device sync.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onSelectModule('system_check')}
+              className="px-3 py-1 rounded-md bg-white text-rose-700 font-bold hover:bg-rose-50 transition-colors self-start sm:self-auto cursor-pointer shadow-xs"
+            >
+              {isUrdu ? 'ابھی جوڑیں (Connect Now)' : 'Connect Now'}
+            </button>
           </div>
         )}
 
