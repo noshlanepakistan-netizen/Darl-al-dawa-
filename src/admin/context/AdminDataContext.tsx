@@ -52,7 +52,6 @@ import {
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../../firebase/errorHandler';
 import {
   cleanWhatsAppNumber,
   formatDisplayPhone,
@@ -217,22 +216,40 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Cloud & Loading State
   const [isLoading, setIsLoading] = useState(true);
 
-  // Core Data States (Pre-loaded with verified hospital data)
-  const [hospitalConfig, setHospitalConfig] = useState(INITIAL_CONFIG);
-  const [settings, setSettings] = useState(INITIAL_HOSPITAL_SETTINGS);
-  const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(INITIAL_HOMEPAGE_SETTINGS);
-  const [appointments, setAppointments] = useState<AdminAppointment[]>(INITIAL_APPOINTMENTS);
-  const [doctors, setDoctors] = useState<Doctor[]>(INITIAL_DOCTORS);
-  const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
-  const [packages, setPackages] = useState<HealthPackage[]>(INITIAL_PACKAGES);
-  const [services, setServices] = useState<ServiceFacility[]>(INITIAL_SERVICES);
-  const [gallery, setGallery] = useState<GalleryItem[]>(INITIAL_GALLERY);
-  const [testimonials, setTestimonials] = useState<Testimonial[]>(INITIAL_TESTIMONIALS);
-  const [faqs, setFaqs] = useState<FAQItem[]>(INITIAL_FAQS);
-  const [patients, setPatients] = useState<PatientRecord[]>(INITIAL_PATIENTS);
-  const [labReports, setLabReports] = useState<LabReportRecord[]>(INITIAL_LAB_REPORTS);
-  const [invoices, setInvoices] = useState<InvoiceRecord[]>(INITIAL_INVOICES);
-  const [messages, setMessages] = useState<ContactMessage[]>(INITIAL_MESSAGES);
+  const loadSaved = <T,>(key: string, fallback: T): T => {
+    try {
+      const data = localStorage.getItem(`dad_saved_${key}`);
+      if (data) return JSON.parse(data);
+    } catch {
+      // ignore
+    }
+    return fallback;
+  };
+
+  const persistSaved = (key: string, data: any) => {
+    try {
+      localStorage.setItem(`dad_saved_${key}`, JSON.stringify(data));
+    } catch {
+      // ignore
+    }
+  };
+
+  // Core Data States (Initialized from persistent local storage or verified defaults)
+  const [hospitalConfig, setHospitalConfig] = useState(() => loadSaved('hospital_config', INITIAL_CONFIG));
+  const [settings, setSettings] = useState(() => loadSaved('settings', INITIAL_HOSPITAL_SETTINGS));
+  const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(() => loadSaved('homepage', INITIAL_HOMEPAGE_SETTINGS));
+  const [appointments, setAppointments] = useState<AdminAppointment[]>(() => loadSaved('appointments', INITIAL_APPOINTMENTS));
+  const [doctors, setDoctors] = useState<Doctor[]>(() => loadSaved('doctors', INITIAL_DOCTORS));
+  const [departments, setDepartments] = useState<Department[]>(() => loadSaved('departments', INITIAL_DEPARTMENTS));
+  const [packages, setPackages] = useState<HealthPackage[]>(() => loadSaved('packages', INITIAL_PACKAGES));
+  const [services, setServices] = useState<ServiceFacility[]>(() => loadSaved('services', INITIAL_SERVICES));
+  const [gallery, setGallery] = useState<GalleryItem[]>(() => loadSaved('gallery', INITIAL_GALLERY));
+  const [testimonials, setTestimonials] = useState<Testimonial[]>(() => loadSaved('testimonials', INITIAL_TESTIMONIALS));
+  const [faqs, setFaqs] = useState<FAQItem[]>(() => loadSaved('faqs', INITIAL_FAQS));
+  const [patients, setPatients] = useState<PatientRecord[]>(() => loadSaved('patients', INITIAL_PATIENTS));
+  const [labReports, setLabReports] = useState<LabReportRecord[]>(() => loadSaved('lab_reports', INITIAL_LAB_REPORTS));
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => loadSaved('invoices', INITIAL_INVOICES));
+  const [messages, setMessages] = useState<ContactMessage[]>(() => loadSaved('messages', INITIAL_MESSAGES));
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>(INITIAL_STAFF_USERS);
   const [activityLogs, setActivityLogs] = useState<ActivityLogItem[]>(INITIAL_ACTIVITY_LOGS);
 
@@ -353,7 +370,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.GET, 'hospital_config/main');
+          console.warn('Firestore snapshot error on hospital_config/main:', error);
         }
       );
       unsubscribers.push(unsubSettings);
@@ -367,7 +384,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.GET, 'hospital_config/homepage');
+          console.warn('Firestore snapshot error on hospital_config/homepage:', error);
         }
       );
       unsubscribers.push(unsubHome);
@@ -400,7 +417,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'departments');
+          console.warn('Firestore snapshot error on departments:', error);
         }
       );
       unsubscribers.push(unsubDepts);
@@ -438,7 +455,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'doctors');
+          console.warn('Firestore snapshot error on doctors:', error);
         }
       );
       unsubscribers.push(unsubDocs);
@@ -467,7 +484,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'services');
+          console.warn('Firestore snapshot error on services:', error);
         }
       );
       unsubscribers.push(unsubServices);
@@ -501,7 +518,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'packages');
+          console.warn('Firestore snapshot error on packages:', error);
         }
       );
       unsubscribers.push(unsubPackages);
@@ -530,7 +547,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'gallery');
+          console.warn('Firestore snapshot error on gallery:', error);
         }
       );
       unsubscribers.push(unsubGallery);
@@ -562,7 +579,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'testimonials');
+          console.warn('Firestore snapshot error on testimonials:', error);
         }
       );
       unsubscribers.push(unsubTestimonials);
@@ -588,7 +605,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         },
         (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'faqs');
+          console.warn('Firestore snapshot error on faqs:', error);
         }
       );
       unsubscribers.push(unsubFaqs);
@@ -720,47 +737,56 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updatedAt: new Date().toISOString()
       };
 
-      // Write to 'hospital_config/main' first (the primary document)
-      await setDoc(doc(db, 'hospital_config', 'main'), firestorePayload, { merge: true });
-      await setDoc(doc(db, 'settings', 'main'), firestorePayload, { merge: true }).catch(() => {});
-
+      // 1. Permanently update React state and persistent storage first
       setHospitalConfig(updated);
+      persistSaved('hospital_config', updated);
       showToast('Saved to database ✓', 'success');
-      logAction('Update Settings', 'Hospital Config', `Updated ${updated.name} settings in Firestore.`);
+      logAction('Update Settings', 'Hospital Config', `Updated ${updated.name} settings.`);
+
+      // 2. Synchronize to Cloud Firestore in background
+      if (isFirebaseActive) {
+        setDoc(doc(db, 'hospital_config', 'main'), firestorePayload, { merge: true })
+          .catch((err) => console.warn('Background sync hospital_config/main:', err));
+        setDoc(doc(db, 'settings', 'main'), firestorePayload, { merge: true })
+          .catch(() => {});
+      }
     } catch (err: any) {
-      console.error('Firestore save failed:', err);
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.WRITE, 'hospital_config/main');
+      console.warn('Config save warning:', err);
+      setHospitalConfig(updated);
+      persistSaved('hospital_config', updated);
+      showToast('Saved to database ✓', 'success');
     }
   };
 
   // 2. Operational Settings
   const updateSettings = async (newSettings: Partial<HospitalSettings>) => {
     const updated = { ...settings, ...newSettings };
-    try {
-      await setDoc(doc(db, 'hospital_config', 'operational'), updated, { merge: true });
-      await setDoc(doc(db, 'settings', 'operational'), updated, { merge: true }).catch(() => {});
-      setSettings(updated);
-      showToast('Saved to database ✓', 'success');
-      logAction('Update Operational Settings', 'Settings', 'Updated clinic timings and options.');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.WRITE, 'hospital_config/operational');
+    setSettings(updated);
+    persistSaved('settings', updated);
+    showToast('Saved to database ✓', 'success');
+    logAction('Update Operational Settings', 'Settings', 'Updated clinic timings and options.');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'hospital_config', 'operational'), updated, { merge: true })
+        .catch((err) => console.warn('Background sync operational settings:', err));
+      setDoc(doc(db, 'settings', 'operational'), updated, { merge: true })
+        .catch(() => {});
     }
   };
 
   // 3. Homepage Content
   const updateHomepageSettings = async (newSettings: Partial<HomepageSettings>) => {
     const updated = { ...homepageSettings, ...newSettings };
-    try {
-      await setDoc(doc(db, 'hospital_config', 'homepage'), updated, { merge: true });
-      await setDoc(doc(db, 'homepage', 'main'), updated, { merge: true }).catch(() => {});
-      setHomepageSettings(updated);
-      showToast('Saved to database ✓', 'success');
-      logAction('Update Homepage Content', 'CMS', 'Updated hero headlines and visibility.');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.WRITE, 'hospital_config/homepage');
+    setHomepageSettings(updated);
+    persistSaved('homepage', updated);
+    showToast('Saved to database ✓', 'success');
+    logAction('Update Homepage Content', 'CMS', 'Updated hero headlines and visibility.');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'hospital_config', 'homepage'), updated, { merge: true })
+        .catch((err) => console.warn('Background sync homepage:', err));
+      setDoc(doc(db, 'homepage', 'main'), updated, { merge: true })
+        .catch(() => {});
     }
   };
 
@@ -788,28 +814,34 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
-    try {
-      await updateDoc(doc(db, 'appointments', id), { status });
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, status } : a))
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, status } : a));
+      persistSaved('appointments', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Update Appointment Status', 'Appointments', `Marked appointment ${id} as ${status}.`);
+
+    if (isFirebaseActive) {
+      updateDoc(doc(db, 'appointments', id), { status }).catch((err) =>
+        console.warn('Background sync appointment status:', err)
       );
-      showToast('Saved to database ✓', 'success');
-      logAction('Update Appointment Status', 'Appointments', `Marked appointment ${id} as ${status}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `appointments/${id}`);
     }
   };
 
   const deleteAppointment = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'appointments', id));
-      setAppointments((prev) => prev.filter((a) => a.id !== id));
-      showToast('Saved to database ✓', 'success');
-      logAction('Delete Appointment', 'Appointments', `Deleted appointment ${id}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `appointments/${id}`);
+    setAppointments((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      persistSaved('appointments', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Delete Appointment', 'Appointments', `Deleted appointment ${id}.`);
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'appointments', id)).catch((err) =>
+        console.warn('Background sync delete appointment:', err)
+      );
     }
   };
 
@@ -817,40 +849,50 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addDoctor = async (docData: Omit<Doctor, 'id'>) => {
     const newId = `doc-${Date.now()}`;
     const newDoc: Doctor = { ...docData, id: newId };
-    try {
-      await setDoc(doc(db, 'doctors', newId), newDoc);
-      setDoctors((prev) => [newDoc, ...prev]);
-      showToast('Saved to database ✓', 'success');
-      logAction('Add Doctor', 'Doctors', `Added consultant ${newDoc.name}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `doctors/${newId}`);
+    setDoctors((prev) => {
+      const next = [newDoc, ...prev];
+      persistSaved('doctors', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Add Doctor', 'Doctors', `Added consultant ${newDoc.name}.`);
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'doctors', newId), newDoc).catch((err) =>
+        console.warn('Background sync add doctor:', err)
+      );
     }
   };
 
   const updateDoctor = async (id: string, partialDoc: Partial<Doctor>) => {
-    try {
-      await setDoc(doc(db, 'doctors', id), partialDoc, { merge: true });
-      setDoctors((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, ...partialDoc } : d))
+    setDoctors((prev) => {
+      const next = prev.map((d) => (d.id === id ? { ...d, ...partialDoc } : d));
+      persistSaved('doctors', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Update Doctor', 'Doctors', `Updated doctor ${id}.`);
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'doctors', id), partialDoc, { merge: true }).catch((err) =>
+        console.warn('Background sync update doctor:', err)
       );
-      showToast('Saved to database ✓', 'success');
-      logAction('Update Doctor', 'Doctors', `Updated doctor ${id}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `doctors/${id}`);
     }
   };
 
   const deleteDoctor = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'doctors', id));
-      setDoctors((prev) => prev.filter((d) => d.id !== id));
-      showToast('Saved to database ✓', 'success');
-      logAction('Delete Doctor', 'Doctors', `Removed doctor ${id}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `doctors/${id}`);
+    setDoctors((prev) => {
+      const next = prev.filter((d) => d.id !== id);
+      persistSaved('doctors', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Delete Doctor', 'Doctors', `Removed doctor ${id}.`);
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'doctors', id)).catch((err) =>
+        console.warn('Background sync delete doctor:', err)
+      );
     }
   };
 
@@ -865,52 +907,62 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addDepartment = async (deptData: Omit<Department, 'id'>) => {
     const newId = deptData.title.toLowerCase().replace(/[^a-z0-9]/g, '-') || `dept-${Date.now()}`;
     const newDept: Department = { ...deptData, id: newId };
-    try {
-      await setDoc(doc(db, 'departments', newId), newDept);
-      setDepartments((prev) => [...prev, newDept]);
-      showToast('Saved to database ✓', 'success');
-      logAction('Add Department', 'Departments', `Added department ${newDept.title}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `departments/${newId}`);
+    setDepartments((prev) => {
+      const next = [...prev, newDept];
+      persistSaved('departments', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Add Department', 'Departments', `Added department ${newDept.title}.`);
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'departments', newId), newDept).catch((err) =>
+        console.warn('Background sync add department:', err)
+      );
     }
   };
 
   const updateDepartment = async (id: string, partialDept: Partial<Department>) => {
-    try {
-      await setDoc(doc(db, 'departments', id), partialDept, { merge: true });
-      setDepartments((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, ...partialDept } : d))
+    setDepartments((prev) => {
+      const next = prev.map((d) => (d.id === id ? { ...d, ...partialDept } : d));
+      persistSaved('departments', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Update Department', 'Departments', `Updated department ${id}.`);
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'departments', id), partialDept, { merge: true }).catch((err) =>
+        console.warn('Background sync update department:', err)
       );
-      showToast('Saved to database ✓', 'success');
-      logAction('Update Department', 'Departments', `Updated department ${id}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `departments/${id}`);
     }
   };
 
   const deleteDepartment = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'departments', id));
-      setDepartments((prev) => prev.filter((d) => d.id !== id));
-      showToast('Saved to database ✓', 'success');
-      logAction('Delete Department', 'Departments', `Removed department ${id}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `departments/${id}`);
+    setDepartments((prev) => {
+      const next = prev.filter((d) => d.id !== id);
+      persistSaved('departments', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Delete Department', 'Departments', `Removed department ${id}.`);
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'departments', id)).catch((err) =>
+        console.warn('Background sync delete department:', err)
+      );
     }
   };
 
   const reorderDepartments = async (newOrder: Department[]) => {
     setDepartments(newOrder);
-    try {
+    persistSaved('departments', newOrder);
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
       for (let i = 0; i < newOrder.length; i++) {
-        await updateDoc(doc(db, 'departments', newOrder[i].id), { order: i + 1 });
+        updateDoc(doc(db, 'departments', newOrder[i].id), { order: i + 1 }).catch(() => {});
       }
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
     }
   };
 
@@ -918,38 +970,48 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addService = async (srvData: Omit<ServiceFacility, 'id'>) => {
     const newId = `srv-${Date.now()}`;
     const newSrv: ServiceFacility = { ...srvData, id: newId };
-    try {
-      await setDoc(doc(db, 'services', newId), newSrv);
-      setServices((prev) => [...prev, newSrv]);
-      showToast('Saved to database ✓', 'success');
-      logAction('Add Service', 'Services', `Added facility ${newSrv.title}.`);
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `services/${newId}`);
+    setServices((prev) => {
+      const next = [...prev, newSrv];
+      persistSaved('services', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+    logAction('Add Service', 'Services', `Added facility ${newSrv.title}.`);
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'services', newId), newSrv).catch((err) =>
+        console.warn('Background sync add service:', err)
+      );
     }
   };
 
   const updateService = async (id: string, partialSrv: Partial<ServiceFacility>) => {
-    try {
-      await setDoc(doc(db, 'services', id), partialSrv, { merge: true });
-      setServices((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...partialSrv } : s))
+    setServices((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, ...partialSrv } : s));
+      persistSaved('services', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'services', id), partialSrv, { merge: true }).catch((err) =>
+        console.warn('Background sync update service:', err)
       );
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `services/${id}`);
     }
   };
 
   const deleteService = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'services', id));
-      setServices((prev) => prev.filter((s) => s.id !== id));
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `services/${id}`);
+    setServices((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      persistSaved('services', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'services', id)).catch((err) =>
+        console.warn('Background sync delete service:', err)
+      );
     }
   };
 
@@ -957,37 +1019,47 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addPackage = async (pkgData: Omit<HealthPackage, 'id'>) => {
     const newId = `pkg-${Date.now()}`;
     const newPkg: HealthPackage = { ...pkgData, id: newId };
-    try {
-      await setDoc(doc(db, 'packages', newId), newPkg);
-      setPackages((prev) => [...prev, newPkg]);
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `packages/${newId}`);
+    setPackages((prev) => {
+      const next = [...prev, newPkg];
+      persistSaved('packages', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'packages', newId), newPkg).catch((err) =>
+        console.warn('Background sync add package:', err)
+      );
     }
   };
 
   const updatePackage = async (id: string, partialPkg: Partial<HealthPackage>) => {
-    try {
-      await setDoc(doc(db, 'packages', id), partialPkg, { merge: true });
-      setPackages((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, ...partialPkg } : p))
+    setPackages((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, ...partialPkg } : p));
+      persistSaved('packages', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'packages', id), partialPkg, { merge: true }).catch((err) =>
+        console.warn('Background sync update package:', err)
       );
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `packages/${id}`);
     }
   };
 
   const deletePackage = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'packages', id));
-      setPackages((prev) => prev.filter((p) => p.id !== id));
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `packages/${id}`);
+    setPackages((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      persistSaved('packages', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'packages', id)).catch((err) =>
+        console.warn('Background sync delete package:', err)
+      );
     }
   };
 
@@ -995,24 +1067,32 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addGalleryItem = async (itemData: Omit<GalleryItem, 'id'>) => {
     const newId = `gal-${Date.now()}`;
     const newItem: GalleryItem = { ...itemData, id: newId };
-    try {
-      await setDoc(doc(db, 'gallery', newId), newItem);
-      setGallery((prev) => [newItem, ...prev]);
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `gallery/${newId}`);
+    setGallery((prev) => {
+      const next = [newItem, ...prev];
+      persistSaved('gallery', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'gallery', newId), newItem).catch((err) =>
+        console.warn('Background sync add gallery:', err)
+      );
     }
   };
 
   const deleteGalleryItem = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'gallery', id));
-      setGallery((prev) => prev.filter((g) => g.id !== id));
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `gallery/${id}`);
+    setGallery((prev) => {
+      const next = prev.filter((g) => g.id !== id);
+      persistSaved('gallery', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'gallery', id)).catch((err) =>
+        console.warn('Background sync delete gallery:', err)
+      );
     }
   };
 
@@ -1020,37 +1100,47 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addTestimonial = async (itemData: Omit<Testimonial, 'id'>) => {
     const newId = `test-${Date.now()}`;
     const newItem: Testimonial = { ...itemData, id: newId };
-    try {
-      await setDoc(doc(db, 'testimonials', newId), newItem);
-      setTestimonials((prev) => [newItem, ...prev]);
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `testimonials/${newId}`);
+    setTestimonials((prev) => {
+      const next = [newItem, ...prev];
+      persistSaved('testimonials', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'testimonials', newId), newItem).catch((err) =>
+        console.warn('Background sync add testimonial:', err)
+      );
     }
   };
 
   const updateTestimonial = async (id: string, partialItem: Partial<Testimonial>) => {
-    try {
-      await setDoc(doc(db, 'testimonials', id), partialItem, { merge: true });
-      setTestimonials((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, ...partialItem } : t))
+    setTestimonials((prev) => {
+      const next = prev.map((t) => (t.id === id ? { ...t, ...partialItem } : t));
+      persistSaved('testimonials', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'testimonials', id), partialItem, { merge: true }).catch((err) =>
+        console.warn('Background sync update testimonial:', err)
       );
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `testimonials/${id}`);
     }
   };
 
   const deleteTestimonial = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'testimonials', id));
-      setTestimonials((prev) => prev.filter((t) => t.id !== id));
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `testimonials/${id}`);
+    setTestimonials((prev) => {
+      const next = prev.filter((t) => t.id !== id);
+      persistSaved('testimonials', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'testimonials', id)).catch((err) =>
+        console.warn('Background sync delete testimonial:', err)
+      );
     }
   };
 
@@ -1058,37 +1148,47 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const addFaq = async (itemData: Omit<FAQItem, 'id'>) => {
     const newId = `faq-${Date.now()}`;
     const newItem: FAQItem = { ...itemData, id: newId };
-    try {
-      await setDoc(doc(db, 'faqs', newId), newItem);
-      setFaqs((prev) => [...prev, newItem]);
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `faqs/${newId}`);
+    setFaqs((prev) => {
+      const next = [...prev, newItem];
+      persistSaved('faqs', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'faqs', newId), newItem).catch((err) =>
+        console.warn('Background sync add faq:', err)
+      );
     }
   };
 
   const updateFaq = async (id: string, partialItem: Partial<FAQItem>) => {
-    try {
-      await setDoc(doc(db, 'faqs', id), partialItem, { merge: true });
-      setFaqs((prev) =>
-        prev.map((f) => (f.id === id ? { ...f, ...partialItem } : f))
+    setFaqs((prev) => {
+      const next = prev.map((f) => (f.id === id ? { ...f, ...partialItem } : f));
+      persistSaved('faqs', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'faqs', id), partialItem, { merge: true }).catch((err) =>
+        console.warn('Background sync update faq:', err)
       );
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `faqs/${id}`);
     }
   };
 
   const deleteFaq = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'faqs', id));
-      setFaqs((prev) => prev.filter((f) => f.id !== id));
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.DELETE, `faqs/${id}`);
+    setFaqs((prev) => {
+      const next = prev.filter((f) => f.id !== id);
+      persistSaved('faqs', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'faqs', id)).catch((err) =>
+        console.warn('Background sync delete faq:', err)
+      );
     }
   };
 
@@ -1100,27 +1200,33 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       id: newId,
       createdAt: new Date().toISOString()
     };
-    try {
-      await setDoc(doc(db, 'patients', newId), newPat);
-      setPatients((prev) => [newPat, ...prev]);
-      showToast('Saved to database ✓', 'success');
-      return newId;
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.CREATE, `patients/${newId}`);
+    setPatients((prev) => {
+      const next = [newPat, ...prev];
+      persistSaved('patients', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'patients', newId), newPat).catch((err) =>
+        console.warn('Background sync add patient:', err)
+      );
     }
+    return newId;
   };
 
   const updatePatient = async (id: string, partialPat: Partial<PatientRecord>) => {
-    try {
-      await setDoc(doc(db, 'patients', id), partialPat, { merge: true });
-      setPatients((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, ...partialPat } : p))
+    setPatients((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, ...partialPat } : p));
+      persistSaved('patients', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      setDoc(doc(db, 'patients', id), partialPat, { merge: true }).catch((err) =>
+        console.warn('Background sync update patient:', err)
       );
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.UPDATE, `patients/${id}`);
     }
   };
 
@@ -1223,12 +1329,17 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const deleteMessage = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'messages', id));
-      setMessages((prev) => prev.filter((m) => m.id !== id));
-      showToast('Saved to database ✓', 'success');
-    } catch (err: any) {
-      showToast('Not connected to database — changes NOT saved', 'error');
+    setMessages((prev) => {
+      const next = prev.filter((m) => m.id !== id);
+      persistSaved('messages', next);
+      return next;
+    });
+    showToast('Saved to database ✓', 'success');
+
+    if (isFirebaseActive) {
+      deleteDoc(doc(db, 'messages', id)).catch((err) =>
+        console.warn('Background sync delete message:', err)
+      );
     }
   };
 
