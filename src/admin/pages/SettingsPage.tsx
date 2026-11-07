@@ -42,7 +42,12 @@ import {
   Send,
   Volume2,
   VolumeX,
-  Smartphone
+  Smartphone,
+  Copy,
+  ExternalLink,
+  Check,
+  Download,
+  Upload
 } from 'lucide-react';
 import { useNotifications } from '../../context/NotificationContext';
 import { requestPushPermission, ONESIGNAL_APP_ID } from '../../utils/oneSignal';
@@ -104,7 +109,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
     isFirebaseActive,
     isLoading,
     refetchData,
-    importOldDataToFirebase
+    importOldDataToFirebase,
+    cloudSyncStatus,
+    checkCloudWriteStatus,
+    firestoreRulesUrl,
+    exportAllDataJSON,
+    restoreFromJSON
   } = useAdminData();
 
   const { currentUser, updateProfile, changePassword, logout } = useAdminAuth();
@@ -119,6 +129,63 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTestingCloud, setIsTestingCloud] = useState(false);
+  const [copiedRules, setCopiedRules] = useState(false);
+  const [isDeviceTransferModalOpen, setIsDeviceTransferModalOpen] = useState(false);
+  const [restoreJsonInput, setRestoreJsonInput] = useState('');
+
+  const FIRESTORE_RULES_SNIPPET = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+
+  const handleCopyRules = () => {
+    navigator.clipboard.writeText(FIRESTORE_RULES_SNIPPET);
+    setCopiedRules(true);
+    showToast('Rules code copied! Paste in Firebase Console & click Publish.');
+    setTimeout(() => setCopiedRules(false), 3500);
+  };
+
+  const handleTestCloudWrite = async () => {
+    setIsTestingCloud(true);
+    const ok = await checkCloudWriteStatus();
+    setIsTestingCloud(false);
+    if (ok) {
+      showToast('Cloud Write is Active & Working! Multi-device sync is LIVE ✓', 'success');
+    } else {
+      showToast('Cloud Write is still blocked. Please publish the rules in Firebase Console.', 'error');
+    }
+  };
+
+  const handleCopyBackupData = () => {
+    const json = exportAllDataJSON();
+    navigator.clipboard.writeText(json);
+    showToast('All hospital settings copied! You can paste this on another device.');
+  };
+
+  const handleDownloadBackup = () => {
+    const json = exportAllDataJSON();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dar-al-dawa-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Settings backup downloaded ✓');
+  };
+
+  const handleApplyRestore = () => {
+    if (!restoreJsonInput.trim()) {
+      showToast('Please paste the backup JSON data first', 'error');
+      return;
+    }
+    const success = restoreFromJSON(restoreJsonInput.trim());
+    if (success) {
+      showToast('Settings successfully applied on this device! ✓', 'success');
+      setIsDeviceTransferModalOpen(false);
+      setRestoreJsonInput('');
+    } else {
+      showToast('Invalid backup data. Please check and try again.', 'error');
+    }
+  };
 
   const handleImportLocalData = async () => {
     setIsImporting(true);
@@ -816,82 +883,143 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
       </div>
 
       {/* Firebase Cloud Connection & Sync Status Banner */}
-      <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
-        isFirebaseActive 
-          ? 'bg-gradient-to-r from-teal-900 to-emerald-950 text-white border-teal-700 shadow-md'
-          : 'bg-amber-50 border-amber-200 text-slate-800'
-      }`}>
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isFirebaseActive ? 'bg-white/10 text-emerald-300' : 'bg-amber-200/80 text-amber-800'
-            }`}>
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className={`text-sm font-bold ${isFirebaseActive ? 'text-white' : 'text-slate-900'}`}>
-                  {isFirebaseActive ? 'Firebase Cloud Firestore & Storage Active' : 'Firebase Cloud Database Setup Required'}
-                </h3>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                  isFirebaseActive 
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
-                    : 'bg-amber-100 text-amber-800 border border-amber-300'
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${isFirebaseActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
-                  {isFirebaseActive ? 'Live Multi-Device Sync' : 'Configuration Notice'}
-                </span>
+      {cloudSyncStatus === 'blocked' ? (
+        <div className="p-4 sm:p-5 rounded-2xl border transition-all bg-gradient-to-r from-amber-950/90 via-slate-900 to-amber-950/80 text-white border-amber-500/50 shadow-md">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                <AlertTriangle className="w-5 h-5 text-amber-400 animate-pulse" />
               </div>
-              <p className={`text-xs mt-1 leading-relaxed ${isFirebaseActive ? 'text-teal-100/90' : 'text-slate-600'}`}>
-                {isFirebaseActive
-                  ? 'All changes to hospital settings, doctors, departments, gallery images, and patient appointments sync in real-time across Netlify, phones, and computers via Cloud Firestore.'
-                  : 'Firebase credentials can be checked in System Check. Real-time updates are active once credentials are confirmed.'}
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">
+                    {isUrdu ? 'کلاؤڈ سنک بلاکڈ — دوسری ڈیوائس پر اپڈیٹ روک دی گئی ہے' : 'Multi-Device Cloud Sync Blocked by Firebase Rules'}
+                  </h3>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                    Action Required
+                  </span>
+                </div>
+                <p className="text-xs mt-1.5 leading-relaxed text-amber-100/90 max-w-2xl">
+                  {isUrdu
+                    ? 'ڈیٹا اس فون پر محفوظ ہو گیا ہے، لیکن گوگل فائر بیس رولز بلاک ہونے کی وجہ سے دوسرے فون یا کمپیوٹر پر ابھی نہیں پہنچ رہا۔ رولز پبلش کرتے ہی تمام ڈیوائسز فوری طور پر سنک ہو جائیں گی۔'
+                    : 'Settings are permanently saved on this device, but writes to Cloud Firestore are blocked by security rules. Publish the 3-line rules in Firebase Console to enable live sync across all phones & computers.'}
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-center">
-            {/* One-time Import Old Data to Database Button */}
-            <button
-              type="button"
-              onClick={handleImportLocalData}
-              disabled={isImporting}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
-                isFirebaseActive
-                  ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold active:scale-95 disabled:opacity-50'
-                  : 'bg-teal-700 hover:bg-teal-800 text-white active:scale-95 disabled:opacity-50'
-              }`}
-              title="Uploads and initializes the standard hospital catalog directly to Firebase Firestore"
-            >
-              <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-bounce' : ''}`} />
-              <span>{isImporting ? 'Importing Data...' : 'Import Data to Firebase'}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+              {/* Direct Link to Firebase Rules */}
+              <a
+                href={firestoreRulesUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>{isUrdu ? '1-Click فائر بیس رولز کھولیں' : 'Open Firebase Rules'}</span>
+              </a>
 
-            {/* Refresh Cloud Data */}
-            <button
-              type="button"
-              onClick={handleRefreshCloud}
-              disabled={isRefreshing}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                isFirebaseActive
-                  ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
-                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
-              }`}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>{isRefreshing ? 'Syncing...' : 'Sync Now'}</span>
-            </button>
+              {/* Copy Rules Code */}
+              <button
+                type="button"
+                onClick={handleCopyRules}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+              >
+                {copiedRules ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedRules ? 'Copied ✓' : (isUrdu ? 'رولز کوڈ کاپی کریں' : 'Copy Rules')}</span>
+              </button>
+
+              {/* Test Cloud Write */}
+              <button
+                type="button"
+                onClick={handleTestCloudWrite}
+                disabled={isTestingCloud}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isTestingCloud ? 'animate-spin' : ''}`} />
+                <span>{isTestingCloud ? 'Checking...' : (isUrdu ? 'دوبارہ ٹیسٹ کریں' : 'Re-check Sync')}</span>
+              </button>
+
+              {/* Instant Direct Device-to-Device Transfer */}
+              <button
+                type="button"
+                onClick={() => setIsDeviceTransferModalOpen(true)}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-teal-200 border border-teal-500/30 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                title="Transfer settings directly to another device without Firebase"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>{isUrdu ? 'ڈیوائس ٹرانسفر' : 'Device Transfer'}</span>
+              </button>
+            </div>
           </div>
         </div>
+      ) : (
+        <div className="p-4 sm:p-5 rounded-2xl border transition-all bg-gradient-to-r from-teal-900 to-emerald-950 text-white border-teal-700 shadow-md">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-white/10 text-emerald-300">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">
+                    Firebase Cloud Firestore & Storage Active
+                  </h3>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live Multi-Device Sync Active
+                  </span>
+                </div>
+                <p className="text-xs mt-1 leading-relaxed text-teal-100/90">
+                  {isUrdu
+                    ? 'تمام ترامیم تمام موبائلز، کمپیوٹرز اور نیٹلی فائی پر لائیو سنک ہو رہی ہیں۔'
+                    : 'All changes to hospital settings, doctors, departments, gallery images, and patient appointments sync in real-time across Netlify, phones, and computers via Cloud Firestore.'}
+                </p>
+              </div>
+            </div>
 
-        {/* Import status notification banner */}
-        {importNotice && (
-          <div className="mt-3 pt-3 border-t border-white/10 text-xs font-medium text-emerald-200 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{importNotice}</span>
+            <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-center">
+              <button
+                type="button"
+                onClick={handleImportLocalData}
+                disabled={isImporting}
+                className="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
+                title="Uploads and initializes the standard hospital catalog directly to Firebase Firestore"
+              >
+                <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-bounce' : ''}`} />
+                <span>{isImporting ? 'Importing Data...' : 'Import Data to Firebase'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRefreshCloud}
+                disabled={isRefreshing}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Syncing...' : 'Sync Now'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDeviceTransferModalOpen(true)}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-teal-200 border border-teal-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Device Transfer</span>
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+
+          {importNotice && (
+            <div className="mt-3 pt-3 border-t border-white/10 text-xs font-medium text-emerald-200 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{importNotice}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Tabs Navigation */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
@@ -3094,6 +3222,87 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          DEVICE-TO-DEVICE DIRECT TRANSFER & BACKUP MODAL
+         ======================================================== */}
+      {isDeviceTransferModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-teal-700" />
+                <h3 className="text-base font-bold text-slate-900">
+                  {isUrdu ? 'ڈیوائس سے ڈیوائس ترامیم منتقل کریں' : 'Instant Device-to-Device Transfer'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDeviceTransferModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 pt-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {isUrdu
+                  ? 'آپ اپنی تمام ہسپتال سیٹنگز، ڈاکٹرز اور مواد کو ایک ڈیوائس سے کاپی کر کے دوسرے فون یا کمپیوٹر پر بغیر فائر بیس کے فوراً لاگو کر سکتے ہیں:'
+                  : 'Instantly transfer all hospital branding, faculty, and settings between your phones and computers:'}
+              </p>
+
+              {/* Option 1: Export from this device */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                <h4 className="text-xs font-bold text-slate-800">
+                  {isUrdu ? '1. اس ڈیوائس سے سیٹنگز لیں (Export):' : '1. Export from this device:'}
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyBackupData}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-teal-700 hover:bg-teal-800 text-white flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{isUrdu ? 'سیٹنگز کاپی کریں (Clipboard)' : 'Copy Settings to Clipboard'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadBackup}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{isUrdu ? 'بیک اپ فائل ڈاؤن لوڈ کریں' : 'Download JSON File'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 2: Import into this device */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                <h4 className="text-xs font-bold text-slate-800">
+                  {isUrdu ? '2. دوسرے ڈیوائس کا ڈیٹا یہاں پیسٹ کریں (Import):' : '2. Apply settings from another device:'}
+                </h4>
+                <textarea
+                  rows={4}
+                  value={restoreJsonInput}
+                  onChange={(e) => setRestoreJsonInput(e.target.value)}
+                  placeholder={isUrdu ? 'یہاں کاپی شدہ JSON ڈیٹا پیسٹ کریں...' : 'Paste exported JSON data here...'}
+                  className="w-full p-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:outline-none focus:border-teal-500 bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyRestore}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isUrdu ? 'اس ڈیوائس پر لاگو کریں (Apply to this Device)' : 'Apply to this Device'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -206,15 +206,24 @@ interface AdminDataContextType {
   // Backup & Reset
   exportAllDataJSON: () => string;
   restoreFromJSON: (jsonData: string) => boolean;
+
+  // Cloud Write & Rules Health
+  cloudSyncStatus: 'checking' | 'active' | 'blocked';
+  checkCloudWriteStatus: () => Promise<boolean>;
+  firestoreRulesUrl: string;
 }
 
 const AdminDataContext = createContext<AdminDataContextType | undefined>(undefined);
+
+export const FIRESTORE_RULES_URL =
+  'https://console.firebase.google.com/project/gen-lang-client-0045111977/firestore/databases/ai-studio-daraldawamedical-d5b4c248-6425-4a40-b000-c65868c0e634/rules';
 
 export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isFirebaseActive = isFirebaseConfigured();
 
   // Cloud & Loading State
   const [isLoading, setIsLoading] = useState(true);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'checking' | 'active' | 'blocked'>('checking');
 
   const loadSaved = <T,>(key: string, fallback: T): T => {
     try {
@@ -267,6 +276,33 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
+
+  // Test Cloud Write capability (Detects if Firebase Rules are blocking cross-device sync)
+  const checkCloudWriteStatus = useCallback(async (): Promise<boolean> => {
+    if (!isFirebaseActive) {
+      setCloudSyncStatus('blocked');
+      return false;
+    }
+    try {
+      await setDoc(
+        doc(db, 'system_health', 'ping'),
+        {
+          lastPing: new Date().toISOString()
+        },
+        { merge: true }
+      );
+      setCloudSyncStatus('active');
+      return true;
+    } catch (err: any) {
+      console.warn('Cloud sync write check:', err);
+      setCloudSyncStatus('blocked');
+      return false;
+    }
+  }, [isFirebaseActive]);
+
+  useEffect(() => {
+    checkCloudWriteStatus();
+  }, [checkCloudWriteStatus]);
 
   // Activity Logger
   const logAction = async (action: string, module: string, details: string) => {
@@ -746,7 +782,11 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // 2. Synchronize to Cloud Firestore in background
       if (isFirebaseActive) {
         setDoc(doc(db, 'hospital_config', 'main'), firestorePayload, { merge: true })
-          .catch((err) => console.warn('Background sync hospital_config/main:', err));
+          .then(() => setCloudSyncStatus('active'))
+          .catch((err) => {
+            console.warn('Background sync hospital_config/main:', err);
+            setCloudSyncStatus('blocked');
+          });
         setDoc(doc(db, 'settings', 'main'), firestorePayload, { merge: true })
           .catch(() => {});
       }
@@ -1585,7 +1625,11 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         removeToast,
 
         exportAllDataJSON,
-        restoreFromJSON
+        restoreFromJSON,
+
+        cloudSyncStatus,
+        checkCloudWriteStatus,
+        firestoreRulesUrl: FIRESTORE_RULES_URL
       }}
     >
       {children}
