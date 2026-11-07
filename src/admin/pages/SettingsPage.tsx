@@ -101,10 +101,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
     updateFaq,
     deleteFaq,
     showToast,
-    isSupabaseActive,
+    isFirebaseActive,
     isLoading,
     refetchData,
-    importLocalDataToSupabase
+    importOldDataToFirebase
   } = useAdminData();
 
   const { currentUser, updateProfile, changePassword, logout } = useAdminAuth();
@@ -115,7 +115,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
 
-  // Supabase Import & Sync state
+  // Firebase Import & Sync state
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -124,13 +124,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
     setIsImporting(true);
     setImportNotice(null);
     try {
-      const res = await importLocalDataToSupabase();
+      const res = await importOldDataToFirebase();
       if (res.success) {
-        setImportNotice(`Migration completed! ${res.count} records imported to Supabase Cloud.`);
+        setImportNotice(`Migration completed! ${res.count} records imported to Cloud Firestore.`);
         showToast(`Data migration successful! ${res.count} records loaded.`);
       } else {
         setImportNotice(`Import notice: ${res.error || 'Failed to complete migration'}`);
-        showToast(res.error || 'Migration failed. Check Supabase connection.', 'error');
+        showToast(res.error || 'Migration failed. Check Firebase connection.', 'error');
       }
     } catch (err: any) {
       setImportNotice(`Error during migration: ${err.message || 'Unknown error'}`);
@@ -190,7 +190,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   const [socYoutube, setSocYoutube] = useState(hospitalConfig.socialLinks?.youtube || 'https://youtube.com/@daraldawamedical');
   const [socTiktok, setSocTiktok] = useState(hospitalConfig.socialLinks?.tiktok || 'https://tiktok.com/@daraldawamedical');
 
-  // Synchronize state when hospitalConfig loads or updates from Supabase
+  // Synchronize state when hospitalConfig loads or updates from Cloud Firestore
   useEffect(() => {
     if (hospitalConfig) {
       setGenHospitalName(hospitalConfig.name || '');
@@ -265,7 +265,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
   const [hpAboutImage, setHpAboutImage] = useState(homepageSettings.aboutImage);
   const [sectionsVis, setSectionsVis] = useState(homepageSettings.sectionsVisibility);
 
-  // Synchronize state when homepageSettings loads from Supabase
+  // Synchronize state when homepageSettings loads from Cloud Firestore
   useEffect(() => {
     if (homepageSettings) {
       setHpHeading(homepageSettings.heroHeading || '');
@@ -815,56 +815,56 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
         </div>
       </div>
 
-      {/* Supabase Cloud Connection & Sync Status Banner */}
+      {/* Firebase Cloud Connection & Sync Status Banner */}
       <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
-        isSupabaseActive 
+        isFirebaseActive 
           ? 'bg-gradient-to-r from-teal-900 to-emerald-950 text-white border-teal-700 shadow-md'
           : 'bg-amber-50 border-amber-200 text-slate-800'
       }`}>
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isSupabaseActive ? 'bg-white/10 text-emerald-300' : 'bg-amber-200/80 text-amber-800'
+              isFirebaseActive ? 'bg-white/10 text-emerald-300' : 'bg-amber-200/80 text-amber-800'
             }`}>
               <Database className="w-5 h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className={`text-sm font-bold ${isSupabaseActive ? 'text-white' : 'text-slate-900'}`}>
-                  {isSupabaseActive ? 'Supabase Cloud Database & Storage Active' : 'Supabase Cloud Database Setup Required'}
+                <h3 className={`text-sm font-bold ${isFirebaseActive ? 'text-white' : 'text-slate-900'}`}>
+                  {isFirebaseActive ? 'Firebase Cloud Firestore & Storage Active' : 'Firebase Cloud Database Setup Required'}
                 </h3>
                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                  isSupabaseActive 
+                  isFirebaseActive 
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
                     : 'bg-amber-100 text-amber-800 border border-amber-300'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
-                  {isSupabaseActive ? 'Live Multi-Device Sync' : 'Local Fallback Mode'}
+                  <span className={`w-1.5 h-1.5 rounded-full ${isFirebaseActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
+                  {isFirebaseActive ? 'Live Multi-Device Sync' : 'Configuration Notice'}
                 </span>
               </div>
-              <p className={`text-xs mt-1 leading-relaxed ${isSupabaseActive ? 'text-teal-100/90' : 'text-slate-600'}`}>
-                {isSupabaseActive
-                  ? 'All changes to hospital settings, doctors, departments, gallery images, and patient appointments sync in real-time across Netlify, phones, and computers.'
-                  : 'Currently running on browser fallback. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Netlify Environment Variables to enable live multi-device syncing.'}
+              <p className={`text-xs mt-1 leading-relaxed ${isFirebaseActive ? 'text-teal-100/90' : 'text-slate-600'}`}>
+                {isFirebaseActive
+                  ? 'All changes to hospital settings, doctors, departments, gallery images, and patient appointments sync in real-time across Netlify, phones, and computers via Cloud Firestore.'
+                  : 'Firebase credentials can be checked in System Check. Real-time updates are active once credentials are confirmed.'}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-center">
-            {/* One-time Import Local Data to Database Button */}
+            {/* One-time Import Old Data to Database Button */}
             <button
               type="button"
               onClick={handleImportLocalData}
               disabled={isImporting}
               className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-xs ${
-                isSupabaseActive
+                isFirebaseActive
                   ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold active:scale-95 disabled:opacity-50'
                   : 'bg-teal-700 hover:bg-teal-800 text-white active:scale-95 disabled:opacity-50'
               }`}
-              title="Uploads and initializes the standard hospital catalog directly to Supabase cloud database"
+              title="Uploads and initializes the standard hospital catalog directly to Firebase Firestore"
             >
               <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-bounce' : ''}`} />
-              <span>{isImporting ? 'Importing Local Data...' : 'Import Local Data to Database'}</span>
+              <span>{isImporting ? 'Importing Data...' : 'Import Data to Firebase'}</span>
             </button>
 
             {/* Refresh Cloud Data */}
@@ -873,7 +873,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
               onClick={handleRefreshCloud}
               disabled={isRefreshing}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                isSupabaseActive
+                isFirebaseActive
                   ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
                   : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
               }`}

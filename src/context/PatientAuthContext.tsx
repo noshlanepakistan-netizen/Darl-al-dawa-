@@ -1,6 +1,25 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as fbSignOut,
+  sendPasswordResetEmail,
+  onAuthStateChanged
+} from 'firebase/auth';
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc
+} from 'firebase/firestore';
 import { PatientProfile, PatientAppointment } from '../types/patient';
-import { supabase, isSupabaseConfigured } from '../supabase/config';
+import { auth, db, isFirebaseConfigured } from '../firebase/config';
 import { tagPatientDevice, logoutOneSignal } from '../utils/oneSignal';
 
 interface PatientAuthContextType {
@@ -32,42 +51,36 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [myAppointments, setMyAppointments] = useState<PatientAppointment[]>([]);
 
-  // Fetch patient profile from 'patients' table
+  // Fetch patient profile from Firestore 'patients' collection
   const fetchPatientProfile = useCallback(async (userId: string, userEmail?: string) => {
     try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const patientRef = doc(db, 'patients', userId);
+      const snap = await getDoc(patientRef);
 
-      if (error) {
-        console.warn('Error fetching patient profile:', error);
-      }
-
-      if (data) {
-        if (data.is_blocked) {
-          await supabase.auth.signOut();
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.is_blocked || data.isBlocked) {
+          await fbSignOut(auth);
           setPatient(null);
           return { blocked: true };
         }
 
         const profile: PatientProfile = {
-          id: data.id,
+          id: snap.id,
           email: data.email || userEmail || '',
-          fullName: data.full_name || data.name || '',
+          fullName: data.full_name || data.name || data.fullName || '',
           phone: data.phone || '',
           gender: data.gender || 'Male',
-          dateOfBirth: data.date_of_birth || undefined,
+          dateOfBirth: data.date_of_birth || data.dateOfBirth || undefined,
           city: data.city || data.address || 'Lahore',
-          isBlocked: data.is_blocked || false,
-          createdAt: data.created_at || new Date().toISOString()
+          isBlocked: data.is_blocked || data.isBlocked || false,
+          createdAt: data.created_at || data.createdAt || new Date().toISOString()
         };
         setPatient(profile);
         tagPatientDevice(profile.id, profile.email);
         return { profile };
       } else if (userEmail && userEmail !== 'admin@daraldawa.com') {
-        // Fallback: If auth user exists but patient row was not yet created
+        // Fallback: If auth user exists but patient doc was not yet created
         const tempProfile: PatientProfile = {
           id: userId,
           email: userEmail,
@@ -81,114 +94,86 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return { profile: tempProfile };
       }
     } catch (err) {
-      console.error('Failed to load patient record:', err);
+      console.error('Failed to load patient record from Firestore:', err);
     }
     return { profile: null };
   }, []);
 
-  // Fetch appointments for this patient
-  const fetchMyAppointments = useCallback(async () => {
-    if (!patient?.id && !patient?.phone) return;
-
-    try {
-      let query = supabase
-        .from('appointments')
-        .select('*')
-        .order('appointment_date', { ascending: false });
-
-      if (patient.id) {
-        query = query.or(`patient_id.eq.${patient.id},phone.eq.${patient.phone}`);
-      } else {
-        query = query.eq('phone', patient.phone);
-      }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        setMyAppointments(
-          data.map((a: any) => ({
-            id: a.id,
-            token: a.token,
-            patientId: a.patient_id,
-            patientName: a.patient_name,
-            phone: a.phone,
-            cnic: a.cnic,
-            departmentId: a.department_id,
-            doctorId: a.doctor_id,
-            appointmentDate: a.appointment_date,
-            timeSlot: a.time_slot,
-            patientType: a.patient_type || 'new',
-            notes: a.notes,
-            status: a.status,
-            createdAt: a.created_at
-          }))
-        );
-      }
-    } catch (err) {
-      console.warn('Failed to fetch patient appointments:', err);
-    }
-  }, [patient]);
-
-  // Sync auth state on mount
+  // Sync auth state with Firebase Auth on mount
   useEffect(() => {
     let mounted = true;
 
-    const initAuth = async () => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user && session.user.email !== 'admin@daraldawa.com') {
-          // If session is a patient, fetch their profile
-          await fetchPatientProfile(session.user.id, session.user.email);
+        if (firebaseUser && firebaseUser.email !== 'admin@daraldawa.com') {
+          await fetchPatientProfile(firebaseUser.uid, firebaseUser.email || undefined);
+        } else if (!firebaseUser) {
+          setPatient(null);
+          setMyAppointments([]);
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.warn('Patient auth state change warning:', err);
       } finally {
         if (mounted) setIsLoading(false);
-      }
-    };
-
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user && session.user.email !== 'admin@daraldawa.com') {
-        await fetchPatientProfile(session.user.id, session.user.email);
-      } else if (!session) {
-        setPatient(null);
-        setMyAppointments([]);
       }
     });
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, [fetchPatientProfile]);
 
-  // Load appointments whenever patient profile is active
+  // Real-time listener for patient's appointments from Firestore
   useEffect(() => {
-    if (patient) {
-      fetchMyAppointments();
+    if (!patient?.id && !patient?.phone) {
+      setMyAppointments([]);
+      return;
     }
-  }, [patient, fetchMyAppointments]);
 
-  // Real-time listener for patient's appointments
-  useEffect(() => {
-    if (!patient?.id) return;
+    try {
+      const apptsRef = collection(db, 'appointments');
+      // Set up real-time listener filtering by patientId or phone
+      let q = query(apptsRef, orderBy('createdAt', 'desc'));
+      if (patient.id) {
+        q = query(apptsRef, where('patientId', '==', patient.id));
+      }
 
-    const channel = supabase
-      .channel(`patient_appts:${patient.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'appointments' },
-        () => {
-          fetchMyAppointments();
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const list: PatientAppointment[] = [];
+          snapshot.forEach((docSnap) => {
+            const a = docSnap.data();
+            list.push({
+              id: docSnap.id,
+              token: a.token || a.id || docSnap.id.substring(0, 6).toUpperCase(),
+              patientId: a.patientId || a.patient_id,
+              patientName: a.patientName || a.patient_name || a.name || '',
+              phone: a.phone || '',
+              cnic: a.cnic,
+              departmentId: a.departmentId || a.department_id || '',
+              doctorId: a.doctorId || a.doctor_id || '',
+              appointmentDate: a.appointmentDate || a.appointment_date || a.date || '',
+              timeSlot: a.timeSlot || a.time_slot || a.time || '',
+              patientType: a.patientType || a.patient_type || 'new',
+              notes: a.notes,
+              status: (a.status as any) || 'pending',
+              createdAt: a.createdAt || a.created_at || new Date().toISOString()
+            });
+          });
+          setMyAppointments(list);
+        },
+        (error) => {
+          console.warn('Error listening to patient appointments:', error);
         }
-      )
-      .subscribe();
+      );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [patient?.id, fetchMyAppointments]);
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn('Could not subscribe to patient appointments:', err);
+    }
+  }, [patient?.id, patient?.phone]);
 
   // Sign Up
   const signUp = async (params: {
@@ -200,7 +185,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     dateOfBirth?: string;
     city: string;
   }): Promise<{ success: boolean; error?: string }> => {
-    if (!isSupabaseConfigured()) {
+    if (!isFirebaseConfigured()) {
       return { success: false, error: 'Database is not connected.' };
     }
 
@@ -210,75 +195,50 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: params.password,
-        options: {
-          data: {
-            full_name: params.fullName.trim(),
-            phone: params.phone.trim(),
-            gender: params.gender,
-            city: params.city.trim()
-          }
-        }
-      });
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, params.password);
+      const uid = userCredential.user.uid;
 
-      if (authError) {
-        return { success: false, error: authError.message };
-      }
-
-      const uid = authData.user?.id;
-      if (!uid) {
-        return { success: false, error: 'Unable to create user account. Please try again.' };
-      }
-
-      // Upsert into patients table
-      const profileRow = {
+      // Upsert into Firestore 'patients' collection
+      const profileDoc = {
         id: uid,
         email: cleanEmail,
-        full_name: params.fullName.trim(),
+        fullName: params.fullName.trim(),
         name: params.fullName.trim(),
         phone: params.phone.trim(),
         gender: params.gender,
-        date_of_birth: params.dateOfBirth || null,
+        dateOfBirth: params.dateOfBirth || null,
         city: params.city.trim(),
         address: params.city.trim(),
-        is_blocked: false,
-        created_at: new Date().toISOString()
+        isBlocked: false,
+        createdAt: new Date().toISOString()
       };
 
-      const { error: profileError } = await supabase
-        .from('patients')
-        .upsert(profileRow);
+      await setDoc(doc(db, 'patients', uid), profileDoc);
 
-      if (profileError) {
-        console.warn('Profile table insert warning:', profileError);
-      }
-
-      // Create initial notification for hospital admin and patient
+      // Create initial notifications in Firestore
       try {
-        await supabase.from('notifications').insert([
-          {
-            user_id: uid,
-            role: 'patient',
-            title: 'Welcome to Dar al Dawa Medical Center',
-            message: `Hello ${params.fullName}, your patient portal is now active. You can manage your appointments and view reports online.`,
-            type: 'patient_registered',
-            read: false,
-            created_at: new Date().toISOString()
-          },
-          {
-            user_id: 'admin',
-            role: 'admin',
-            title: 'New Patient Registration',
-            message: `${params.fullName} (${params.phone}) registered a new patient account from ${params.city}.`,
-            type: 'patient_registered',
-            read: false,
-            created_at: new Date().toISOString()
-          }
-        ]);
-      } catch {
-        // ignore
+        const notifsRef = collection(db, 'notifications');
+        await addDoc(notifsRef, {
+          userId: uid,
+          role: 'patient',
+          title: 'Welcome to Dar al Dawa Medical Center',
+          message: `Hello ${params.fullName}, your patient portal is now active. You can manage your appointments and view reports online.`,
+          type: 'patient_registered',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        await addDoc(notifsRef, {
+          userId: 'admin',
+          role: 'admin',
+          title: 'New Patient Registration',
+          message: `${params.fullName} (${params.phone}) registered a new patient account from ${params.city}.`,
+          type: 'patient_registered',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Failed to insert initial notification:', err);
       }
 
       const newProfile: PatientProfile = {
@@ -290,14 +250,20 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         dateOfBirth: params.dateOfBirth,
         city: params.city.trim(),
         isBlocked: false,
-        createdAt: profileRow.created_at
+        createdAt: profileDoc.createdAt
       };
 
       setPatient(newProfile);
       tagPatientDevice(uid, cleanEmail);
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || 'Registration failed' };
+      let message = err.message || 'Registration failed';
+      if (err.code === 'auth/email-already-in-use') {
+        message = 'An account with this email already exists. Please log in.';
+      } else if (err.code === 'auth/weak-password') {
+        message = 'Password should be at least 6 characters.';
+      }
+      return { success: false, error: message };
     }
   };
 
@@ -313,20 +279,10 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: pass
-      });
+      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+      const user = userCredential.user;
 
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
-      if (!data.user) {
-        return { success: false, error: 'Invalid email or password.' };
-      }
-
-      const res = await fetchPatientProfile(data.user.id, data.user.email);
+      const res = await fetchPatientProfile(user.uid, user.email || undefined);
       if (res?.blocked) {
         return {
           success: false,
@@ -336,7 +292,11 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || 'Login failed' };
+      let message = err.message || 'Login failed';
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        message = 'Invalid email or password.';
+      }
+      return { success: false, error: message };
     }
   };
 
@@ -344,7 +304,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const logout = async () => {
     try {
       logoutOneSignal();
-      await supabase.auth.signOut();
+      await fbSignOut(auth);
     } catch {
       // ignore
     }
@@ -355,12 +315,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Forgot password
   const forgotPassword = async (email: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/#reset-password`
-      });
-      if (error) {
-        return { success: false, message: error.message };
-      }
+      await sendPasswordResetEmail(auth, email.trim());
       return {
         success: true,
         message: 'Password reset link sent! Please check your email inbox.'
@@ -375,39 +330,33 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!patient) return { success: false, error: 'Not authenticated' };
 
     try {
+      const patientRef = doc(db, 'patients', patient.id);
       const payload: any = {
-        full_name: updates.fullName !== undefined ? updates.fullName : patient.fullName,
+        fullName: updates.fullName !== undefined ? updates.fullName : patient.fullName,
         name: updates.fullName !== undefined ? updates.fullName : patient.fullName,
         phone: updates.phone !== undefined ? updates.phone : patient.phone,
         gender: updates.gender !== undefined ? updates.gender : patient.gender,
-        date_of_birth: updates.dateOfBirth !== undefined ? updates.dateOfBirth : patient.dateOfBirth,
+        dateOfBirth: updates.dateOfBirth !== undefined ? updates.dateOfBirth : patient.dateOfBirth,
         city: updates.city !== undefined ? updates.city : patient.city,
         address: updates.city !== undefined ? updates.city : patient.city,
-        updated_at: new Date().toISOString()
+        updatedAt: new Date().toISOString()
       };
 
-      const { error } = await supabase
-        .from('patients')
-        .update(payload)
-        .eq('id', patient.id);
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
+      await updateDoc(patientRef, payload);
 
       const updated = { ...patient, ...updates };
       setPatient(updated);
 
       // Notify admin of profile update
       try {
-        await supabase.from('notifications').insert({
-          user_id: 'admin',
+        await addDoc(collection(db, 'notifications'), {
+          userId: 'admin',
           role: 'admin',
           title: 'Patient Profile Updated',
           message: `${updated.fullName} (${updated.phone}) updated their medical contact profile.`,
           type: 'system',
           read: false,
-          created_at: new Date().toISOString()
+          createdAt: new Date().toISOString()
         });
       } catch {
         // ignore
@@ -429,14 +378,11 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return { success: false, error: 'Only pending appointments can be cancelled online.' };
       }
 
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status: 'cancelled' })
-        .eq('id', id);
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
+      const apptRef = doc(db, 'appointments', id);
+      await updateDoc(apptRef, {
+        status: 'cancelled',
+        updatedAt: new Date().toISOString()
+      });
 
       // Update local state
       setMyAppointments((prev) =>
@@ -445,26 +391,26 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       // Add notifications
       try {
-        await supabase.from('notifications').insert([
-          {
-            user_id: patient?.id,
-            role: 'patient',
-            title: 'Appointment Cancelled',
-            message: `Your appointment token ${target.token} for ${target.appointmentDate} has been cancelled.`,
-            type: 'appointment_status',
-            read: false,
-            created_at: new Date().toISOString()
-          },
-          {
-            user_id: 'admin',
-            role: 'admin',
-            title: 'Appointment Cancelled by Patient',
-            message: `Patient ${target.patientName} (${target.phone}) cancelled token ${target.token}.`,
-            type: 'appointment_status',
-            read: false,
-            created_at: new Date().toISOString()
-          }
-        ]);
+        const notifsRef = collection(db, 'notifications');
+        await addDoc(notifsRef, {
+          userId: patient?.id,
+          role: 'patient',
+          title: 'Appointment Cancelled',
+          message: `Your appointment token ${target.token} for ${target.appointmentDate} has been cancelled.`,
+          type: 'appointment_status',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+
+        await addDoc(notifsRef, {
+          userId: 'admin',
+          role: 'admin',
+          title: 'Appointment Cancelled by Patient',
+          message: `Patient ${target.patientName} (${target.phone}) cancelled token ${target.token}.`,
+          type: 'appointment_status',
+          read: false,
+          createdAt: new Date().toISOString()
+        });
       } catch {
         // ignore
       }
@@ -473,6 +419,10 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     } catch (err: any) {
       return { success: false, error: err.message || 'Cancellation failed.' };
     }
+  };
+
+  const refreshAppointments = async () => {
+    // onSnapshot keeps it automatically up to date
   };
 
   return (
@@ -488,7 +438,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         updateProfile,
         myAppointments,
         cancelAppointment,
-        refreshAppointments: fetchMyAppointments
+        refreshAppointments
       }}
     >
       {children}

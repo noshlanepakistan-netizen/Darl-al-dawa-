@@ -1,26 +1,202 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import bundledAppletConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase app safely
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+/**
+ * Dar al Dawa Medical Center - Firebase Client Configuration
+ *
+ * Safe to embed directly in client code; does NOT depend on Netlify environment variables.
+ * If you have a different Firebase project, paste your configuration object below.
+ */
+export const firebaseConfig = {
+  apiKey: bundledAppletConfig.apiKey || "AIzaSyA8FHh5QyTADXA-gHZlb6SPvq0z_Ggx3Ik",
+  authDomain: bundledAppletConfig.authDomain || "gen-lang-client-0045111977.firebaseapp.com",
+  projectId: bundledAppletConfig.projectId || "gen-lang-client-0045111977",
+  firestoreDatabaseId: bundledAppletConfig.firestoreDatabaseId || "(default)",
+  storageBucket: bundledAppletConfig.storageBucket || "gen-lang-client-0045111977.firebasestorage.app",
+  messagingSenderId: bundledAppletConfig.messagingSenderId || "491920539706",
+  appId: bundledAppletConfig.appId || "1:491920539706:web:6d3d8e2e5566b7959a7503"
+};
 
-// CRITICAL: Firestore must be initialized with firebaseConfig.firestoreDatabaseId
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+/**
+ * Cloudinary Unsigned Upload Configuration
+ * If left empty or as placeholder, images automatically upload to Firebase Storage instead.
+ */
+export const CLOUDINARY_CONFIG = {
+  cloudName: "PASTE_CLOUD_NAME_HERE",
+  uploadPreset: "PASTE_UPLOAD_PRESET_HERE"
+};
+
+// Initialize Firebase App
+export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// CRITICAL: Firestore must be initialized with the specific databaseId if configured
+export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
+
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Connection verification test
-export async function testConnection(): Promise<boolean> {
-  try {
-    await getDocFromServer(doc(db, 'hospital_config', 'main'));
-    return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline or network error.');
+/**
+ * Checks whether Firebase is initialized with valid credentials.
+ */
+export const isFirebaseConfigured = (): boolean => {
+  return Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.projectId &&
+    !firebaseConfig.apiKey.includes('PASTE_') &&
+    !firebaseConfig.projectId.includes('PASTE_')
+  );
+};
+
+/**
+ * Client-side image compressor:
+ * Takes a File (e.g. from camera or computer), resizes if dimensions > 1600px,
+ * compresses to JPEG (quality 0.82) so uploads are fast (<300KB) and preserve bandwidth.
+ */
+export const compressImage = async (file: File, maxDim = 1600, quality = 0.82): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    if (file.type === 'image/svg+xml') {
+      resolve(file);
+      return;
     }
-    return false;
+
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+
+    reader.onerror = (err) => reject(err);
+
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            resolve(file);
+          }
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
+ * Uploads an image:
+ * 1. Checks if Cloudinary is configured (unsigned upload). If so, uploads to Cloudinary.
+ * 2. Otherwise, uploads to Firebase Storage and returns the public download URL.
+ */
+export const uploadImageToStorage = async (file: File, folder = 'general'): Promise<string> => {
+  const isCloudinaryReady =
+    CLOUDINARY_CONFIG.cloudName &&
+    CLOUDINARY_CONFIG.uploadPreset &&
+    CLOUDINARY_CONFIG.cloudName !== 'PASTE_CLOUD_NAME_HERE' &&
+    CLOUDINARY_CONFIG.uploadPreset !== 'PASTE_UPLOAD_PRESET_HERE';
+
+  const compressedBlob = await compressImage(file);
+
+  if (isCloudinaryReady) {
+    try {
+      const formData = new FormData();
+      formData.append('file', compressedBlob);
+      formData.append('upload_preset', CLOUDINARY_CONFIG.uploadPreset);
+      formData.append('folder', `daraldawa/${folder}`);
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/image/upload`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Cloudinary upload failed');
+      }
+
+      const data = await response.json();
+      return data.secure_url || data.url;
+    } catch (cloudinaryErr) {
+      console.warn('Cloudinary upload failed, falling back to Firebase Storage:', cloudinaryErr);
+    }
   }
-}
+
+  // Firebase Storage fallback
+  try {
+    const cleanExt = file.type === 'image/svg+xml' ? 'svg' : 'jpg';
+    const filePath = `uploads/${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${cleanExt}`;
+    const storageRef = ref(storage, filePath);
+
+    await uploadBytes(storageRef, compressedBlob, {
+      contentType: file.type === 'image/svg+xml' ? 'image/svg+xml' : 'image/jpeg'
+    });
+
+    const publicUrl = await getDownloadURL(storageRef);
+    return publicUrl;
+  } catch (storageErr: any) {
+    console.error('Firebase Storage upload error:', storageErr);
+    throw new Error(storageErr?.message || 'Failed to upload image. Please check database connection.');
+  }
+};
+
+/**
+ * Diagnostic test connection that tests read/write to Firestore.
+ */
+export const testFirebaseConnection = async (): Promise<{ success: boolean; latencyMs?: number; error?: string }> => {
+  const start = performance.now();
+  const testId = `ping-${Date.now()}`;
+
+  try {
+    const testDocRef = doc(db, 'activity_logs', testId);
+    await setDoc(testDocRef, {
+      action: 'System Ping Self-Test',
+      module: 'System Check',
+      timestamp: new Date().toISOString(),
+      details: 'Diagnostic health check ping'
+    });
+
+    const readSnap = await getDoc(testDocRef);
+    if (!readSnap.exists()) {
+      throw new Error('Test document was written but could not be read back.');
+    }
+
+    await deleteDoc(testDocRef);
+
+    const latencyMs = Math.round(performance.now() - start);
+    return { success: true, latencyMs };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to connect to Firebase Firestore.' };
+  }
+};

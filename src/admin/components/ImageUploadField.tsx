@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X, Image as ImageIcon, RefreshCw, Plus, Check } from 'lucide-react';
-import { uploadImageToStorage } from '../../supabase/config';
+import { uploadImageToStorage } from '../../firebase/config';
 import { ACCEPT_IMAGE_ATTR } from '../utils/imageUpload';
 
 interface SingleImageUploadProps {
@@ -114,7 +114,7 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
             >
               Remove
             </button>
-            <div className="text-[10px] text-slate-400">Uploads to Supabase Storage (auto-compressed)</div>
+            <div className="text-[10px] text-slate-400">Cloud Storage (auto-compressed)</div>
           </div>
         </div>
       ) : (
@@ -127,7 +127,7 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
           {loading ? (
             <div className="flex flex-col items-center gap-1">
               <RefreshCw className="w-6 h-6 text-[#1E5AA8] animate-spin" />
-              <span className="text-[11px] text-slate-500 font-medium">Compressing & Uploading to Supabase...</span>
+              <span className="text-[11px] text-slate-500 font-medium">Compressing & Uploading...</span>
             </div>
           ) : (
             <>
@@ -139,7 +139,7 @@ export const ImageUploadField: React.FC<SingleImageUploadProps> = ({
                   Choose from Gallery / Files
                 </span>
                 <span className="text-[11px] text-slate-400 block mt-0.5">
-                  JPG, PNG, WEBP (auto-compressed & stored in Supabase)
+                  JPG, PNG, WEBP (auto-compressed & saved to cloud)
                 </span>
               </div>
             </>

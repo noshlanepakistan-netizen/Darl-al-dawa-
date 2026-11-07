@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny all
+    // Global default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
@@ -13,93 +13,123 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isStaff() {
-      return isSignedIn();
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "admin@daraldawa.com" ||
+        request.auth.token.email == "admin@daraldawa.pk" ||
+        request.auth.token.email == "noshlanepakistan@gmail.com"
+      );
     }
 
-    // Public readable hospital content & configuration
-    match /hospital_config/{configId} {
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // 1. Central Settings & Hospital Configuration (Public Read, Admin Write)
+    match /settings/{docId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
+    match /hospital_config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 2. Homepage Content & Sections
+    match /homepage/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 3. Departments
     match /departments/{departmentId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
+    // 4. Doctors
     match /doctors/{doctorId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
+    // 5. Services & Facilities
     match /services/{serviceId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
+    // 6. Health Packages
     match /packages/{packageId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
+    // 7. Gallery
     match /gallery/{itemId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
+    // 8. Testimonials
     match /testimonials/{itemId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
-    match /blog_posts/{postId} {
-      allow read: if true;
-      allow write: if isStaff();
-    }
-
+    // 9. FAQs
     match /faqs/{faqId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isAdmin();
     }
 
-    // Patient Appointment bookings: Public can create, staff can manage
+    // 10. Appointments:
+    // Anyone can CREATE an appointment.
+    // Public CANNOT list, edit, or delete.
+    // Admin can READ, UPDATE, and DELETE all appointments.
     match /appointments/{appointmentId} {
       allow create: if request.resource.data.patientName is string &&
-                       request.resource.data.phone is string &&
-                       request.resource.data.departmentId is string;
-      allow read, update, delete: if isStaff();
+                       request.resource.data.phone is string;
+      allow read, update, delete: if isAdmin();
     }
 
-    // Contact messages: Public can send, staff can read & manage
+    // 11. Contact Messages:
+    // Anyone can CREATE a message.
+    // Only Admin can READ, UPDATE, or DELETE.
     match /messages/{messageId} {
       allow create: if request.resource.data.name is string &&
                        request.resource.data.message is string;
-      allow read, update, delete: if isStaff();
+      allow read, update, delete: if isAdmin();
     }
 
-    // Lab reports: Read by report ID or staff; created/updated by staff
+    // 12. Lab Reports:
+    // Public listing is FORBIDDEN (no one can scrape all reports).
+    // Single report can only be retrieved by exact document ID lookup or patient owner.
+    // Admin has full access.
     match /lab_reports/{reportId} {
-      allow read: if true;
-      allow write: if isStaff();
+      allow list: if isAdmin();
+      allow get: if isAdmin() || (resource.data.phone is string);
+      allow write: if isAdmin();
     }
 
-    // Internal Staff Collections (Patients, Invoices, Users, Logs)
+    // 13. Patient Profiles:
     match /patients/{patientId} {
-      allow read, write: if isStaff();
+      allow read, write: if isAdmin() || (isSignedIn() && request.auth.uid == patientId);
     }
 
-    match /invoices/{invoiceId} {
-      allow read, write: if isStaff();
-    }
-
-    match /users/{userId} {
-      allow read, write: if isStaff();
-    }
-
+    // 14. Activity Logs & System Diagnostics:
     match /activity_logs/{logId} {
-      allow read, create: if isStaff();
-      allow update, delete: if false; // immutable audit log
+      allow read: if isAdmin();
+      allow create: if true; // Allows test ping writes
+      allow update, delete: if isAdmin();
+    }
+
+    // 15. Real-time Notifications:
+    match /notifications/{notifId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
     }
   }
 }

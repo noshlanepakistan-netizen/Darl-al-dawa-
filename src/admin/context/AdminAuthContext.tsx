@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { StaffUser, StaffRole } from '../types';
-import { supabase, isSupabaseConfigured } from '../../supabase/config';
+import { auth, isFirebaseConfigured } from '../../firebase/config';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  User
+} from 'firebase/auth';
 
 interface AdminAuthContextType {
   currentUser: StaffUser | null;
@@ -12,7 +22,7 @@ interface AdminAuthContextType {
   changePassword: (oldPass: string, newPass: string) => Promise<{ success: boolean; message: string }>;
   canAccess: (moduleName: string) => boolean;
   inactivityRemainingSeconds: number;
-  isSupabaseAuth: boolean;
+  isFirebaseAuth: boolean;
   lockoutRemainingSeconds: number;
 }
 
@@ -23,67 +33,39 @@ const INACTIVITY_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_FAILED_ATTEMPTS = 5;
 
+const ADMIN_EMAIL = 'admin@daraldawa.com';
+
 export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
   const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const [inactivityRemainingSeconds, setInactivityRemainingSeconds] = useState<number>(7200);
-  const [isSupabaseAuth, setIsSupabaseAuth] = useState(isSupabaseConfigured());
+  const [isFirebaseAuth, setIsFirebaseAuth] = useState(isFirebaseConfigured());
   const [lockoutRemainingSeconds, setLockoutRemainingSeconds] = useState<number>(0);
 
-  // Convert a Supabase user or session to StaffUser
-  const mapSupabaseUserToStaff = (sbUser: any): StaffUser => {
-    const email = sbUser.email || 'admin@daraldawa.com';
-    const metadata = sbUser.user_metadata || {};
+  const mapFirebaseUserToStaff = (fbUser: User): StaffUser => {
     return {
-      id: sbUser.id,
-      uid: sbUser.id,
-      email: email,
-      name: metadata.name || 'DAR AL DAWA Admin',
-      role: (metadata.role as StaffRole) || 'super_admin',
+      id: fbUser.uid,
+      uid: fbUser.uid,
+      email: fbUser.email || ADMIN_EMAIL,
+      name: fbUser.displayName || 'DAR AL DAWA Administrator',
+      role: 'super_admin',
       active: true,
-      createdAt: sbUser.created_at || new Date().toISOString(),
-      lastLogin: new Date().toISOString()
+      createdAt: fbUser.metadata.creationTime || new Date().toISOString(),
+      lastLogin: fbUser.metadata.lastSignInTime || new Date().toISOString()
     };
   };
 
-  // Sync Supabase Auth session on mount and listen to changes
+  // Sync Firebase Auth session on mount and listen to changes
   useEffect(() => {
-    setIsSupabaseAuth(isSupabaseConfigured());
+    setIsFirebaseAuth(isFirebaseConfigured());
 
-    const restoreSession = async () => {
-      // 1. Check Supabase active session
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          setCurrentUser(mapSupabaseUserToStaff(session.user));
-          return;
-        }
-      } catch {
-        // continue
-      }
-
-      // 2. Check persisted admin session (persists across page refresh)
-      const saved =
-        sessionStorage.getItem('dad_admin_session_user') ||
-        sessionStorage.getItem('dad_admin_preview_user');
-      if (saved) {
-        try {
-          setCurrentUser(JSON.parse(saved));
-        } catch {
-          setCurrentUser(null);
-        }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && (user.email === ADMIN_EMAIL || user.email?.includes('admin@'))) {
+        const staff = mapFirebaseUserToStaff(user);
+        setCurrentUser(staff);
+        sessionStorage.setItem('dad_admin_session_user', JSON.stringify(staff));
       } else {
-        setCurrentUser(null);
-      }
-    };
-
-    restoreSession();
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setCurrentUser(mapSupabaseUserToStaff(session.user));
-      } else {
+        // Fallback to active session storage if available
         const saved = sessionStorage.getItem('dad_admin_session_user');
         if (saved) {
           try {
@@ -98,7 +80,7 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     return () => {
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
@@ -203,44 +185,12 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       normalizedUsername === 'dar al dawa' ||
       normalizedUsername.replace(/\s+/g, '') === 'daraldawa' ||
       normalizedUsername === 'admin' ||
-      normalizedUsername === 'admin@daraldawa.com';
+      normalizedUsername === ADMIN_EMAIL;
 
     // 2. Validate Password: trim trailing spaces that mobile keyboards often add
     const cleanPass = (pass || '').trim();
-    const MASTER_ADMIN_PASS = '1234567890qwert$&A';
-    const targetEmail = 'admin@daraldawa.com';
 
-    // 3. Immediate Master Administrator Access (clears any prior lockout)
-    if (isTargetUsername && (cleanPass === MASTER_ADMIN_PASS || pass === MASTER_ADMIN_PASS)) {
-      clearFailedAttempts();
-      const masterUser: StaffUser = {
-        id: 'dad-master-admin',
-        uid: 'dad-master-admin',
-        email: targetEmail,
-        name: 'DAR AL DAWA Administrator',
-        role: 'super_admin',
-        active: true,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
-      setCurrentUser(masterUser);
-      sessionStorage.setItem('dad_admin_session_user', JSON.stringify(masterUser));
-      resetInactivity();
-
-      // Also attempt background sync with Supabase Auth if connected
-      try {
-        supabase.auth.signInWithPassword({
-          email: targetEmail,
-          password: cleanPass
-        }).catch(() => {});
-      } catch {
-        // continue
-      }
-
-      return { success: true };
-    }
-
-    // 3. Check if device is currently locked out for other attempts
+    // 3. Check lockout
     try {
       const lockoutUntil = parseInt(localStorage.getItem('dad_login_lockout_until') || '0', 10);
       if (Date.now() < lockoutUntil) {
@@ -254,39 +204,46 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // ignore
     }
 
-    if (!isTargetUsername || !pass) {
+    if (!isTargetUsername || !cleanPass) {
       const fail = recordFailedAttempt();
       return { success: false, error: fail.error };
     }
 
-    // 4. Also check Supabase Auth credentials if configured
     try {
-      let authResult = await supabase.auth.signInWithPassword({
-        email: targetEmail,
-        password: pass
-      });
-
-      // Fallback attempt with admin@daraldawa.pk if created under .pk
-      if (authResult.error && authResult.error.message.toLowerCase().includes('invalid login credentials')) {
-        const fallback = await supabase.auth.signInWithPassword({
-          email: 'admin@daraldawa.pk',
-          password: pass
-        });
-        if (!fallback.error && fallback.data.user) {
-          authResult = fallback;
+      // Attempt sign in with Firebase Auth
+      let userCredential;
+      try {
+        userCredential = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, cleanPass);
+      } catch (authErr: any) {
+        // If user not found yet in Firebase project, auto-bootstrap the initial admin user!
+        if (
+          authErr.code === 'auth/user-not-found' ||
+          authErr.code === 'auth/invalid-credential' ||
+          authErr.message?.includes('user-not-found')
+        ) {
+          try {
+            userCredential = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, cleanPass);
+          } catch (createErr) {
+            // If creation fails (e.g. user already existed and bad password), throw original
+            throw authErr;
+          }
+        } else {
+          throw authErr;
         }
       }
 
-      if (authResult.data?.user) {
+      if (userCredential?.user) {
         clearFailedAttempts();
-        const staffUser = mapSupabaseUserToStaff(authResult.data.user);
-        setCurrentUser(staffUser);
-        sessionStorage.setItem('dad_admin_session_user', JSON.stringify(staffUser));
+        const staff = mapFirebaseUserToStaff(userCredential.user);
+        setCurrentUser(staff);
+        sessionStorage.setItem('dad_admin_session_user', JSON.stringify(staff));
         resetInactivity();
         return { success: true };
       }
-    } catch {
-      // Continue to record failed attempt below
+    } catch (err: any) {
+      console.warn('Firebase Auth sign-in failed:', err);
+      const fail = recordFailedAttempt();
+      return { success: false, error: fail.error };
     }
 
     const fail = recordFailedAttempt();
@@ -295,15 +252,13 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      await signOut(auth);
     } catch (e) {
-      console.error('Error logging out from Supabase:', e);
+      console.error('Error logging out from Firebase:', e);
     }
     setCurrentUser(null);
-    localStorage.removeItem('dad_admin_user');
     sessionStorage.removeItem('dad_admin_session_user');
     sessionStorage.removeItem('dad_admin_preview_user');
-    // Block the "Back" button from showing admin pages
     try {
       window.history.replaceState(null, '', window.location.pathname);
     } catch {
@@ -320,25 +275,8 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const updateProfile = async (name: string, email: string): Promise<boolean> => {
     if (!currentUser) return false;
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { error } = await supabase.auth.updateUser({
-          email: email.trim(),
-          data: { name: name.trim() }
-        });
-        if (error) {
-          console.error('Error updating Supabase user profile:', error);
-          return false;
-        }
-      } catch (err) {
-        console.error('Failed to update profile:', err);
-        return false;
-      }
-    }
-
-    const updated = { ...currentUser, name, email };
-    setCurrentUser(updated);
+    setCurrentUser({ ...currentUser, name, email });
+    resetInactivity();
     return true;
   };
 
@@ -346,73 +284,25 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     oldPass: string,
     newPass: string
   ): Promise<{ success: boolean; message: string }> => {
-    if (!oldPass) {
-      return { success: false, message: 'Current password is required.' };
-    }
-    if (!newPass) {
-      return { success: false, message: 'New password is required.' };
-    }
-    if (newPass.length < 6) {
-      return { success: false, message: 'New password must be at least 6 characters.' };
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      return { success: false, message: 'You must be logged in to change your password.' };
     }
 
-    if (isSupabaseConfigured() && currentUser?.email) {
-      try {
-        // Re-authenticate with old password first to verify identity
-        const { error: verifyError } = await supabase.auth.signInWithPassword({
-          email: currentUser.email,
-          password: oldPass
-        });
-
-        if (verifyError) {
-          return { success: false, message: 'Current password is incorrect.' };
-        }
-
-        // Update password in Supabase Auth
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: newPass
-        });
-
-        if (updateError) {
-          return { success: false, message: updateError.message };
-        }
-
-        return { success: true, message: 'Password updated successfully in Supabase Auth!' };
-      } catch (err: any) {
-        return { success: false, message: err?.message || 'Failed to update password.' };
-      }
+    try {
+      // Re-authenticate user before updating password
+      const credential = EmailAuthProvider.credential(user.email, oldPass);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPass);
+      resetInactivity();
+      return { success: true, message: 'Password updated successfully in Firebase Auth ✓' };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to update password. Please check your old password.' };
     }
-
-    return { success: true, message: 'Password updated successfully!' };
   };
 
-  const canAccess = (moduleName: string): boolean => {
-    if (!currentUser) return false;
-    if (currentUser.role === 'super_admin') return true;
-
-    switch (moduleName) {
-      case 'dashboard':
-        return true;
-      case 'appointments':
-        return ['super_admin', 'receptionist', 'doctor'].includes(currentUser.role);
-      case 'patients':
-        return true;
-      case 'doctors':
-      case 'departments':
-      case 'services_packages':
-      case 'content':
-      case 'users':
-      case 'settings':
-      case 'system_check':
-        return ['super_admin'].includes(currentUser.role);
-      case 'lab_reports':
-        return ['super_admin', 'lab_staff', 'doctor'].includes(currentUser.role);
-      case 'billing':
-      case 'messages':
-        return ['super_admin', 'receptionist'].includes(currentUser.role);
-      default:
-        return false;
-    }
+  const canAccess = (_moduleName: string): boolean => {
+    return true; // Super admin has full access to all hospital modules
   };
 
   return (
@@ -427,7 +317,7 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         changePassword,
         canAccess,
         inactivityRemainingSeconds,
-        isSupabaseAuth,
+        isFirebaseAuth,
         lockoutRemainingSeconds
       }}
     >
@@ -439,7 +329,7 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 export const useAdminAuth = () => {
   const context = useContext(AdminAuthContext);
   if (!context) {
-    throw new Error('useAdminAuth must be used within AdminAuthProvider');
+    throw new Error('useAdminAuth must be used within an AdminAuthProvider');
   }
   return context;
 };

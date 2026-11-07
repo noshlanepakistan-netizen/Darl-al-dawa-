@@ -1,8 +1,8 @@
 {
   "entities": {
-    "HospitalConfig": {
-      "title": "Hospital Configuration",
-      "description": "Global hospital settings, public content, emergency contacts and operational parameters",
+    "Settings": {
+      "title": "Hospital Settings",
+      "description": "Global hospital settings, emergency numbers, contact channels, address, and operational hours",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
@@ -17,6 +17,38 @@
         "address": { "type": "string" },
         "addressUrdu": { "type": "string" },
         "maintenanceMode": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "emergencyNumber", "receptionPhone", "email", "address"]
+    },
+    "HomepageContent": {
+      "title": "Homepage Content",
+      "description": "Hero banner slides, headlines, badges, and homepage section configuration",
+      "type": "object",
+      "properties": {
+        "heroHeading": { "type": "string" },
+        "heroSubheading": { "type": "string" },
+        "heroButtonText": { "type": "string" },
+        "aboutBadge": { "type": "string" },
+        "aboutHeading": { "type": "string" },
+        "aboutText": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["heroHeading", "heroButtonText"]
+    },
+    "HospitalConfig": {
+      "title": "Hospital Configuration",
+      "description": "Legacy hospital settings, emergency contacts and operational parameters",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "nameUrdu": { "type": "string" },
+        "tagline": { "type": "string" },
+        "emergencyNumber": { "type": "string" },
+        "receptionPhone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["name", "emergencyNumber", "receptionPhone", "email", "address"]
@@ -77,9 +109,66 @@
       },
       "required": ["title", "iconName", "description"]
     },
+    "Service": {
+      "title": "Hospital Service",
+      "description": "Clinical and diagnostic medical service",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "titleUrdu": { "type": "string" },
+        "description": { "type": "string" },
+        "iconName": { "type": "string" }
+      },
+      "required": ["title", "description"]
+    },
+    "Package": {
+      "title": "Health Package",
+      "description": "Preventive healthcare and wellness package",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "titleUrdu": { "type": "string" },
+        "pricePKR": { "type": "number" },
+        "description": { "type": "string" }
+      },
+      "required": ["title", "pricePKR"]
+    },
+    "GalleryItem": {
+      "title": "Gallery Item",
+      "description": "Hospital facility or event photography",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["title", "imageUrl"]
+    },
+    "Testimonial": {
+      "title": "Patient Testimonial",
+      "description": "Patient review and feedback",
+      "type": "object",
+      "properties": {
+        "patientName": { "type": "string" },
+        "comment": { "type": "string" },
+        "rating": { "type": "number" }
+      },
+      "required": ["patientName", "comment"]
+    },
+    "FAQ": {
+      "title": "Frequently Asked Question",
+      "description": "Healthcare FAQ for visitors",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["question", "answer"]
+    },
     "Patient": {
       "title": "Patient Record",
-      "description": "Basic hospital patient registry",
+      "description": "Hospital patient registry",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
@@ -157,7 +246,7 @@
     },
     "ActivityLog": {
       "title": "Activity Log",
-      "description": "Audit trail of CMS operations and changes",
+      "description": "Audit logging of CMS changes",
       "type": "object",
       "properties": {
         "userEmail": { "type": "string" },
@@ -168,9 +257,32 @@
         "timestamp": { "type": "string" }
       },
       "required": ["userEmail", "action", "module", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System or user real-time notification",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "role": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "message", "role"]
     }
   },
   "firestore": {
+    "/settings/{settingsId}": {
+      "schema": "Settings",
+      "description": "Primary hospital contact, emergency numbers, and operational configurations"
+    },
+    "/homepage/{homepageId}": {
+      "schema": "HomepageContent",
+      "description": "Homepage hero banner, promotional content, and section displays"
+    },
     "/hospital_config/{configId}": {
       "schema": "HospitalConfig",
       "description": "Hospital profile, contact info, and website settings"
@@ -186,6 +298,26 @@
     "/departments/{departmentId}": {
       "schema": "Department",
       "description": "Clinical departments"
+    },
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Hospital diagnostic and clinical services"
+    },
+    "/packages/{packageId}": {
+      "schema": "Package",
+      "description": "Hospital checkup and executive packages"
+    },
+    "/gallery/{galleryId}": {
+      "schema": "GalleryItem",
+      "description": "Hospital facility gallery photos"
+    },
+    "/testimonials/{testimonialId}": {
+      "schema": "Testimonial",
+      "description": "Patient reviews and testimonials"
+    },
+    "/faqs/{faqId}": {
+      "schema": "FAQ",
+      "description": "Frequently asked questions"
     },
     "/patients/{patientId}": {
       "schema": "Patient",
@@ -210,6 +342,10 @@
     "/activity_logs/{logId}": {
       "schema": "ActivityLog",
       "description": "Audit logging of CMS changes"
+    },
+    "/notifications/{notifId}": {
+      "schema": "Notification",
+      "description": "Real-time alerts for staff and patients"
     }
   }
 }

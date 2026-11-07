@@ -179,7 +179,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, onGoHome, lang 
 
               <div className="text-[11px] text-slate-400 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#2E9E5B]" />
-                <span>Supabase Protected</span>
+                <span>Firebase Protected</span>
               </div>
             </div>
 

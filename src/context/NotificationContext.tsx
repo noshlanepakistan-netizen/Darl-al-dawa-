@@ -1,6 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import {
+  collection,
+  query,
+  orderBy,
+  limit,
+  onSnapshot,
+  doc,
+  updateDoc,
+  addDoc,
+  writeBatch
+} from 'firebase/firestore';
 import { NotificationItem, NotificationSettings } from '../types/notification';
-import { supabase, isSupabaseConfigured } from '../supabase/config';
+import { db, isFirebaseConfigured } from '../firebase/config';
 import { playNotificationChime } from '../utils/audioChime';
 import { initOneSignal } from '../utils/oneSignal';
 
@@ -41,6 +52,9 @@ export const NotificationProvider: React.FC<{
   userId?: string;
 }> = ({ children, userRole = 'guest', userId }) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const isFirstLoadRef = useRef<boolean>(true);
+  const knownIdsRef = useRef<Set<string>>(new Set());
+
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
     try {
       const saved = localStorage.getItem('dad_notification_settings');
@@ -55,108 +69,70 @@ export const NotificationProvider: React.FC<{
     initOneSignal();
   }, []);
 
-  // Fetch notifications from Supabase
-  const fetchNotifications = useCallback(async () => {
-    if (!isSupabaseConfigured()) return;
+  // Real-time Firestore listener for incoming notifications
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
 
     try {
-      let query = supabase
-        .from('notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(40);
+      const notifsRef = collection(db, 'notifications');
+      const q = query(notifsRef, orderBy('createdAt', 'desc'), limit(50));
 
-      // Filter by role / userId
-      if (userRole === 'admin') {
-        query = query.or('role.eq.admin,role.eq.all');
-      } else if (userRole === 'patient' && userId) {
-        query = query.or(`user_id.eq.${userId},role.eq.all,and(role.eq.patient,user_id.is.null)`);
-      }
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const list: NotificationItem[] = [];
+          let hasNewRelevantItem = false;
 
-      const { data, error } = await query;
-      if (!error && data) {
-        setNotifications(
-          data.map((n: any) => ({
-            id: n.id,
-            userId: n.user_id,
-            role: n.role,
-            title: n.title,
-            message: n.message,
-            type: n.type || 'system',
-            link: n.link,
-            read: n.read ?? false,
-            createdAt: n.created_at
-          }))
-        );
-      }
-    } catch (err) {
-      console.warn('Failed to fetch notifications:', err);
-    }
-  }, [userRole, userId]);
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const id = docSnap.id;
+            const itemRole = data.role || 'all';
+            const itemUserId = data.userId || data.user_id;
 
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+            // Check if this notification is relevant to this user
+            const isForAdmin = userRole === 'admin' && (itemRole === 'admin' || itemRole === 'all' || itemUserId === 'admin');
+            const isForPatient = userRole === 'patient' && (itemUserId === userId || itemRole === 'patient' || itemRole === 'all');
+            const isForGuest = userRole === 'guest' && itemRole === 'all';
 
-  // Real-time listener for incoming notifications
-  useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+            if (isForAdmin || isForPatient || isForGuest) {
+              const notif: NotificationItem = {
+                id,
+                userId: itemUserId,
+                role: itemRole,
+                title: data.title || '',
+                message: data.message || '',
+                type: data.type || 'system',
+                link: data.link,
+                read: data.read ?? false,
+                createdAt: data.createdAt || data.created_at || new Date().toISOString()
+              };
+              list.push(notif);
 
-    const channel = supabase
-      .channel('public:notifications')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload) => {
-          const item = payload.new;
-          // Check if this notification is relevant to this user
-          const isForAdmin = userRole === 'admin' && (item.role === 'admin' || item.role === 'all' || item.user_id === 'admin');
-          const isForPatient = userRole === 'patient' && (item.user_id === userId || item.role === 'patient' || item.role === 'all');
-          const isForGuest = userRole === 'guest' && item.role === 'all';
-
-          if (isForAdmin || isForPatient || isForGuest) {
-            const newNotif: NotificationItem = {
-              id: item.id,
-              userId: item.user_id,
-              role: item.role,
-              title: item.title,
-              message: item.message,
-              type: item.type || 'system',
-              link: item.link,
-              read: item.read ?? false,
-              createdAt: item.created_at
-            };
-
-            setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id)]);
-
-            // Play gentle audio chime if sound is enabled
-            if (notificationSettings.soundEnabled) {
-              playNotificationChime();
+              if (!isFirstLoadRef.current && !knownIdsRef.current.has(id) && !notif.read) {
+                hasNewRelevantItem = true;
+              }
+              knownIdsRef.current.add(id);
             }
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'notifications' },
-        (payload) => {
-          setNotifications((prev) =>
-            prev.map((n) => (n.id === payload.new.id ? { ...n, read: payload.new.read } : n))
-          );
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'notifications' },
-        (payload) => {
-          setNotifications((prev) => prev.filter((n) => n.id !== payload.old.id));
-        }
-      )
-      .subscribe();
+          });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+          setNotifications(list);
+
+          // Play gentle audio chime if new notification arrived after initial load
+          if (hasNewRelevantItem && notificationSettings.soundEnabled) {
+            playNotificationChime();
+          }
+
+          isFirstLoadRef.current = false;
+        },
+        (error) => {
+          console.warn('Firestore notifications listener error:', error);
+        }
+      );
+
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn('Failed to attach Firestore notification listener:', err);
+    }
   }, [userRole, userId, notificationSettings.soundEnabled]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -166,7 +142,8 @@ export const NotificationProvider: React.FC<{
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
     try {
-      await supabase.from('notifications').update({ read: true }).eq('id', id);
+      const notifRef = doc(db, 'notifications', id);
+      await updateDoc(notifRef, { read: true });
     } catch {
       // ignore
     }
@@ -175,10 +152,14 @@ export const NotificationProvider: React.FC<{
   const markAllAsRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
-      const ids = notifications.filter((n) => !n.read).map((n) => n.id);
-      if (ids.length > 0) {
-        await supabase.from('notifications').update({ read: true }).in('id', ids);
-      }
+      const unreadList = notifications.filter((n) => !n.read);
+      if (unreadList.length === 0) return;
+
+      const batch = writeBatch(db);
+      unreadList.forEach((n) => {
+        batch.update(doc(db, 'notifications', n.id), { read: true });
+      });
+      await batch.commit();
     } catch {
       // ignore
     }
@@ -196,21 +177,21 @@ export const NotificationProvider: React.FC<{
     type: NotificationItem['type'];
     link?: string;
   }) => {
-    const newRow = {
-      user_id: item.userId || null,
+    const newDoc = {
+      userId: item.userId || null,
       role: item.role,
       title: item.title,
       message: item.message,
       type: item.type,
       link: item.link || null,
       read: false,
-      created_at: new Date().toISOString()
+      createdAt: new Date().toISOString()
     };
 
     try {
-      await supabase.from('notifications').insert(newRow);
+      await addDoc(collection(db, 'notifications'), newDoc);
     } catch (err) {
-      console.warn('Failed to insert notification:', err);
+      console.warn('Failed to insert notification into Firestore:', err);
     }
   };
 
@@ -232,7 +213,7 @@ export const NotificationProvider: React.FC<{
       role,
       userId: role === 'admin' ? 'admin' : userId,
       title: 'Dar al Dawa Hospital Alert Test',
-      message: `System notification test dispatched at ${new Date().toLocaleTimeString()}. Audio chime and live real-time sync verified.`,
+      message: `System notification test dispatched at ${new Date().toLocaleTimeString()}. Audio chime and live real-time sync verified via Cloud Firestore.`,
       type: 'system'
     });
   };

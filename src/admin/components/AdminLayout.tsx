@@ -29,7 +29,7 @@ import {
   CheckCircle2,
   AlertTriangle
 } from 'lucide-react';
-import { isSupabaseConfigured } from '../../supabase/config';
+import { isFirebaseConfigured } from '../../firebase/config';
 import { StaffRole } from '../types';
 
 interface AdminLayoutProps {
@@ -204,6 +204,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             <LogOut className="w-4 h-4 flex-shrink-0" />
             {!sidebarCollapsed && <span>{isUrdu ? 'لاگ آؤٹ' : 'Sign Out'}</span>}
           </button>
+          {!sidebarCollapsed && (
+            <div className="pt-2 text-[10px] text-slate-500 text-center font-mono border-t border-slate-800/80">
+              v2.5.0 • Firebase Cloud Live
+            </div>
+          )}
         </div>
       </aside>
 
@@ -502,15 +507,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </div>
         )}
 
-        {/* Unconfigured Supabase warning banner */}
-        {!isSupabaseConfigured() && currentModule !== 'system_check' && (
+        {/* Unconfigured Firebase warning banner */}
+        {!isFirebaseConfigured() && currentModule !== 'system_check' && (
           <div className="bg-gradient-to-r from-rose-600 to-rose-700 text-white px-4 py-2.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
             <div className="flex items-center gap-2 font-medium">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
               <span>
                 {isUrdu
-                  ? 'توجہ: سپابیس کلاؤڈ ڈیٹا بیس ابھی منسلک نہیں ہے۔ تمام ڈیوائسز پر لائیو ڈیٹا سنک کرنے کے لیے اپنا URL اور Anon Key جوڑیں۔'
-                  : 'Notice: Live Supabase database is not connected. Connect your Supabase Project URL & Anon Key for instant multi-device sync.'}
+                  ? 'توجہ: فائر بیس کلاؤڈ ڈیٹا بیس منسلک نہیں ہے۔ تمام ڈیوائسز پر لائیو ڈیٹا سنک کرنے کے لیے سسٹم چیک میں جائیں۔'
+                  : 'Notice: Firebase Cloud Database is not connected. Open System Check to verify credentials for instant multi-device sync.'}
               </span>
             </div>
             <button

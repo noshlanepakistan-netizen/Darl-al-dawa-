@@ -8,8 +8,7 @@ import {
   ChevronDown,
   FileText,
   Shield,
-  User,
-  Bell
+  User
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
@@ -18,8 +17,7 @@ import { usePatientAuth } from '../context/PatientAuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
 
-
-// Official WhatsApp Vector Icon
+// Official WhatsApp Vector Icon (used in drawer menu & dropdown)
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
   <svg
     viewBox="0 0 24 24"
@@ -70,7 +68,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     hospitalConfig?.contact?.whatsapp,
     "Hello Dar al Dawa Medical Center Lahore, I have an inquiry"
   );
-
 
   // Close "More" dropdown when clicking outside
   useEffect(() => {
@@ -172,9 +169,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           : 'bg-white py-2 sm:py-3 border-b border-slate-100 shadow-xs'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 lg:px-6 flex items-center justify-between gap-1 sm:gap-3">
-        {/* Hospital Brand Logo */}
-        <a href="#home" className="focus:outline-none shrink min-w-0 pr-1">
+      <div className="max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 lg:px-6 flex items-center justify-between gap-1 min-[360px]:gap-2 sm:gap-3">
+        {/* Hospital Brand Logo (Shrink-0, Never cuts off) */}
+        <a href="#home" className="focus:outline-none shrink-0 min-w-0 pr-1 select-none">
           <Logo isUrdu={isUrdu} />
         </a>
 
@@ -283,7 +280,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </nav>
 
-        {/* Desktop Action Buttons: Phone Call, WhatsApp, Book Appointment, Language */}
+        {/* Desktop Action Buttons (WhatsApp Removed from Header): Phone Call, Book Appointment, Patient Account, Language */}
         <div className="hidden lg:flex items-center gap-2 xl:gap-2.5 shrink-0">
           {/* Hospital Call Button */}
           <a
@@ -295,18 +292,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="font-mono tracking-tight text-[11.5px] xl:text-xs font-bold whitespace-nowrap">
               {emergencyPhone}
             </span>
-          </a>
-
-          {/* Desktop WhatsApp Quick Button */}
-          <a
-            href={whatsappHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 xl:px-3 xl:py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#25D366] border border-emerald-200 font-bold text-xs transition-all whitespace-nowrap shrink-0 shadow-xs active:scale-95"
-            title={isUrdu ? "واٹس ایپ پر رابطہ کریں" : "Chat on WhatsApp"}
-          >
-            <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366] shrink-0" />
-            <span className="text-emerald-800 font-semibold">{isUrdu ? 'واٹس ایپ' : 'WhatsApp'}</span>
           </a>
 
           {/* Book Appointment CTA Button */}
@@ -321,37 +306,35 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
-          {/* Patient Account Button (Desktop) */}
-          {isAuthenticated && patient ? (
-            <button
-              onClick={onOpenPatientDashboard}
-              type="button"
-              className="relative inline-flex items-center gap-1.5 px-3 py-1.5 xl:py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E5AA8] border border-blue-200 font-bold text-xs transition-all whitespace-nowrap shrink-0 shadow-xs active:scale-95 cursor-pointer"
-              title={isUrdu ? "مریض اکاؤنٹ" : "Patient Account"}
-            >
-              <User className="w-3.5 h-3.5 text-[#1E5AA8] shrink-0" />
-              <span className="truncate max-w-[95px]">{patient.fullName ? patient.fullName.split(' ')[0] : 'Account'}</span>
-              {unreadCount > 0 && (
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          {/* Customer / Patient Account Button (Desktop) — Positioned right next to Language Button */}
+          <button
+            onClick={isAuthenticated ? onOpenPatientDashboard : onOpenPatientAuth}
+            type="button"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 xl:py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 whitespace-nowrap shadow-2xs"
+            title={isAuthenticated ? (isUrdu ? "میرا اکاؤنٹ" : "My Account") : (isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register")}
+          >
+            <div className="relative flex items-center justify-center">
+              {isAuthenticated && patient?.fullName ? (
+                <span className="w-4 h-4 rounded-full bg-[#1E5AA8] text-white text-[9px] font-bold flex items-center justify-center shrink-0">
+                  {patient.fullName.trim().charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <User className="w-3.5 h-3.5 text-[#1E5AA8] shrink-0" />
               )}
-            </button>
-          ) : (
-            <button
-              onClick={onOpenPatientAuth}
-              type="button"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 xl:py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-              title={isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register"}
-            >
-              <User className="w-3.5 h-3.5 text-[#1E5AA8] shrink-0" />
-              <span>{isUrdu ? 'لاگ ان' : 'Sign In'}</span>
-            </button>
-          )}
+              {isAuthenticated && (
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#2E9E5B] ring-1 ring-white" />
+              )}
+            </div>
+            <span className={isUrdu ? 'font-urdu' : ''}>
+              {isUrdu ? 'اکاؤنٹ' : 'Account'}
+            </span>
+          </button>
 
           {/* Language Toggle */}
           <button
             onClick={onToggleLang}
             type="button"
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 xl:py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 xl:py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 whitespace-nowrap shadow-2xs"
             title={isUrdu ? "Switch to English" : "اردو میں دیکھیں"}
           >
             <Globe className="w-3.5 h-3.5 text-[#1E5AA8] shrink-0" />
@@ -359,50 +342,47 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Mobile Header Controls: Patient User, WhatsApp, Language Toggle, and Three Lines Menu */}
-        <div className="flex items-center gap-1 min-[360px]:gap-1.5 lg:hidden shrink-0">
-          {/* Mobile Patient Profile/Login Shortcut */}
+        {/* Mobile Header Controls: Exactly 3 items in one centered row: Account -> اردو Language -> Menu */}
+        <div className="flex items-center gap-1.5 min-[360px]:gap-2 lg:hidden shrink-0">
+          {/* 1. Customer / Patient Account Button (Mobile) */}
           <button
             onClick={isAuthenticated ? onOpenPatientDashboard : onOpenPatientAuth}
             type="button"
-            className="relative flex items-center justify-center p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E5AA8] border border-blue-200 active:scale-95 transition-all shrink-0 shadow-2xs cursor-pointer"
-            title={isAuthenticated ? (isUrdu ? "مریض اکاؤنٹ" : "My Account") : (isUrdu ? "لاگ ان" : "Patient Login")}
+            className="relative flex items-center justify-center w-8 h-8 min-[360px]:w-8.5 min-[360px]:h-8.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title={isAuthenticated ? (isUrdu ? "مریض اکاؤنٹ" : "My Account") : (isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register")}
             aria-label="Patient Account"
           >
-            <User className="w-4 h-4 text-[#1E5AA8]" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-1 ring-white" />
+            {isAuthenticated && patient?.fullName ? (
+              <span className="w-5 h-5 rounded-full bg-[#1E5AA8] text-white text-[10px] font-bold flex items-center justify-center">
+                {patient.fullName.trim().charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              <User className="w-4 h-4 text-[#1E5AA8]" />
+            )}
+            {isAuthenticated && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#2E9E5B] ring-1.5 ring-white" />
+            )}
+            {unreadCount > 0 && !isAuthenticated && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-1.5 ring-white" />
             )}
           </button>
 
-          {/* Mobile Direct WhatsApp Button */}
-          <a
-            href={whatsappHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center p-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 text-white transition-all shrink-0 shadow-xs border border-[#20bd5a]"
-            title={isUrdu ? "واٹس ایپ رابطہ" : "WhatsApp"}
-            aria-label="WhatsApp"
-          >
-            <WhatsAppIcon className="w-4 h-4 fill-white" />
-          </a>
-
-          {/* Mobile Language Toggle */}
+          {/* 2. Mobile Language Toggle Button */}
           <button
             onClick={onToggleLang}
             type="button"
-            className="flex items-center gap-1 px-2 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition-colors shrink-0 cursor-pointer shadow-2xs"
+            className="flex items-center justify-center gap-1 px-2 h-8 min-[360px]:h-8.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 transition-colors shrink-0 cursor-pointer shadow-2xs"
             title={isUrdu ? "Switch to English" : "اردو میں دیکھیں"}
           >
             <Globe className="w-3.5 h-3.5 text-[#1E5AA8]" />
-            <span className="font-semibold">{isUrdu ? 'English' : 'اردو'}</span>
+            <span className="font-semibold text-[11px] min-[360px]:text-xs">{isUrdu ? 'English' : 'اردو'}</span>
           </button>
 
-          {/* Three Lines Menu (Hamburger) Button */}
+          {/* 3. Three Lines Menu (Hamburger) Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             type="button"
-            className="flex items-center justify-center p-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 border border-slate-300 text-slate-900 focus:outline-none shrink-0 cursor-pointer shadow-2xs transition-all"
+            className="flex items-center justify-center w-8 h-8 min-[360px]:w-8.5 min-[360px]:h-8.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 border border-slate-300 text-slate-900 focus:outline-none shrink-0 cursor-pointer shadow-2xs transition-all"
             aria-label={isUrdu ? "مینیو کھولیں" : "Toggle navigation menu"}
             title={isUrdu ? "مینیو" : "Menu"}
           >
@@ -477,7 +457,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* WhatsApp Contact in Mobile Menu */}
+            {/* WhatsApp Contact in Mobile Menu (Retained for easy patient contact) */}
             <a
               href={whatsappHref}
               target="_blank"

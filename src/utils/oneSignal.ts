@@ -1,5 +1,4 @@
-// Client-side OneSignal Web Push Integration Helper
-// NOTE: REST API key is NEVER used here. It is used strictly in Supabase Edge Functions.
+// NOTE: REST API key is NEVER used here. It is used strictly in backend Firebase Cloud Functions.
 
 declare global {
   interface Window {
