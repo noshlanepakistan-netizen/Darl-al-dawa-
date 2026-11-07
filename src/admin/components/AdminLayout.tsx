@@ -206,7 +206,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </button>
           {!sidebarCollapsed && (
             <div className="pt-2 text-[10px] text-slate-500 text-center font-mono border-t border-slate-800/80">
-              v2.5.0 • Firebase Cloud Live
+              v2.5.0 • Nov 2026 • Firebase Cloud Live
             </div>
           )}
         </div>

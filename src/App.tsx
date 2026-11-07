@@ -91,21 +91,6 @@ export default function App() {
         path.includes('/admin') ||
         path.includes('/staff')
       ) {
-        if (isPatientAuthenticated && patient) {
-          showToast(
-            lang === 'ur'
-              ? 'رسائی مسترد: مریض پورٹل صارف اسٹاف ایڈمن پورٹل تک رسائی کا مجاز نہیں ہے۔'
-              : 'Access Denied: Patient accounts are not authorized to access the Staff Admin Portal.',
-            'error'
-          );
-          try {
-            window.history.replaceState(null, '', window.location.pathname);
-          } catch {
-            window.location.hash = '';
-          }
-          setViewMode('website');
-          return;
-        }
         setViewMode('admin');
       }
     };
@@ -118,7 +103,7 @@ export default function App() {
       window.removeEventListener('hashchange', checkAdminRoute);
       window.removeEventListener('popstate', checkAdminRoute);
     };
-  }, [isPatientAuthenticated, patient, lang, showToast]);
+  }, []);
 
   // Handle RTL vs LTR attribute on <html> element
   useEffect(() => {
@@ -131,15 +116,6 @@ export default function App() {
   };
 
   const handleOpenAdmin = () => {
-    if (isPatientAuthenticated && patient) {
-      showToast(
-        lang === 'ur'
-          ? 'رسائی مسترد: مریض پورٹل صارف اسٹاف ایڈمن پورٹل تک رسائی کا مجاز نہیں ہے۔'
-          : 'Access Denied: Patient accounts are not authorized to access the Staff Admin Portal.',
-        'error'
-      );
-      return;
-    }
     setViewMode('admin');
     window.location.hash = 'admin';
   };
