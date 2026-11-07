@@ -720,9 +720,9 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updatedAt: new Date().toISOString()
       };
 
-      // Write to both 'settings/main' and 'hospital_config/main' for full coverage
-      await setDoc(doc(db, 'settings', 'main'), firestorePayload, { merge: true });
+      // Write to 'hospital_config/main' first (the primary document)
       await setDoc(doc(db, 'hospital_config', 'main'), firestorePayload, { merge: true });
+      await setDoc(doc(db, 'settings', 'main'), firestorePayload, { merge: true }).catch(() => {});
 
       setHospitalConfig(updated);
       showToast('Saved to database ✓', 'success');
@@ -730,7 +730,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch (err: any) {
       console.error('Firestore save failed:', err);
       showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.WRITE, 'settings/main');
+      handleFirestoreError(err, OperationType.WRITE, 'hospital_config/main');
     }
   };
 
@@ -738,13 +738,14 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const updateSettings = async (newSettings: Partial<HospitalSettings>) => {
     const updated = { ...settings, ...newSettings };
     try {
-      await setDoc(doc(db, 'settings', 'operational'), updated, { merge: true });
+      await setDoc(doc(db, 'hospital_config', 'operational'), updated, { merge: true });
+      await setDoc(doc(db, 'settings', 'operational'), updated, { merge: true }).catch(() => {});
       setSettings(updated);
       showToast('Saved to database ✓', 'success');
       logAction('Update Operational Settings', 'Settings', 'Updated clinic timings and options.');
     } catch (err: any) {
       showToast('Not connected to database — changes NOT saved', 'error');
-      handleFirestoreError(err, OperationType.WRITE, 'settings/operational');
+      handleFirestoreError(err, OperationType.WRITE, 'hospital_config/operational');
     }
   };
 
