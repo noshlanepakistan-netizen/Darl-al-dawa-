@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import bundledAppletConfig from '../../firebase-applet-config.json';
 
@@ -11,13 +11,13 @@ import bundledAppletConfig from '../../firebase-applet-config.json';
  * If you have a different Firebase project, paste your configuration object below.
  */
 export const firebaseConfig = {
-  apiKey: bundledAppletConfig.apiKey || "AIzaSyA8FHh5QyTADXA-gHZlb6SPvq0z_Ggx3Ik",
-  authDomain: bundledAppletConfig.authDomain || "gen-lang-client-0045111977.firebaseapp.com",
-  projectId: bundledAppletConfig.projectId || "gen-lang-client-0045111977",
-  firestoreDatabaseId: bundledAppletConfig.firestoreDatabaseId || "(default)",
-  storageBucket: bundledAppletConfig.storageBucket || "gen-lang-client-0045111977.firebasestorage.app",
-  messagingSenderId: bundledAppletConfig.messagingSenderId || "491920539706",
-  appId: bundledAppletConfig.appId || "1:491920539706:web:6d3d8e2e5566b7959a7503"
+  apiKey: bundledAppletConfig.apiKey || "AIzaSyB7mnyoZ4Qi_hDEXR0c2VL7z5Wl8LV2pOY",
+  authDomain: bundledAppletConfig.authDomain || "gen-lang-client-0019179268.firebaseapp.com",
+  projectId: bundledAppletConfig.projectId || "gen-lang-client-0019179268",
+  firestoreDatabaseId: bundledAppletConfig.firestoreDatabaseId || "ai-studio-darlaldawa-19ecd389-339d-4fe7-833b-b757b0452621",
+  storageBucket: bundledAppletConfig.storageBucket || "gen-lang-client-0019179268.firebasestorage.app",
+  messagingSenderId: bundledAppletConfig.messagingSenderId || "234501490401",
+  appId: bundledAppletConfig.appId || "1:234501490401:web:3022672f7e910f457119a0"
 };
 
 /**
@@ -32,10 +32,20 @@ export const CLOUDINARY_CONFIG = {
 // Initialize Firebase App
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// CRITICAL: Firestore must be initialized with the specific databaseId if configured
-export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+// CRITICAL: Firestore must be initialized with the specific databaseId if configured and use long-polling for instant connection
+const firestoreDbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
+  ? firebaseConfig.firestoreDatabaseId
+  : undefined;
+
+export const db = (() => {
+  try {
+    return firestoreDbId
+      ? initializeFirestore(app, { experimentalForceLongPolling: true }, firestoreDbId)
+      : initializeFirestore(app, { experimentalForceLongPolling: true });
+  } catch {
+    return firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
+  }
+})();
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);

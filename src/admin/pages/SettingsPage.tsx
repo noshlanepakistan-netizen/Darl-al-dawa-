@@ -882,7 +882,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
         </div>
       </div>
 
-      {/* Firebase Cloud Connection & Sync Status Banner */}
+      {/* Universal Cloud Connection & Sync Status Banner */}
       {cloudSyncStatus === 'blocked' ? (
         <div className="p-4 sm:p-5 rounded-2xl border transition-all bg-gradient-to-r from-amber-950/90 via-slate-900 to-amber-950/80 text-white border-amber-500/50 shadow-md">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -893,60 +893,36 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-bold text-white">
-                    {isUrdu ? 'کلاؤڈ سنک بلاکڈ — دوسری ڈیوائس پر اپڈیٹ روک دی گئی ہے' : 'Multi-Device Cloud Sync Blocked by Firebase Rules'}
+                    {isUrdu ? 'آف لائن موڈ — ڈیٹا لوکل میموری میں محفوظ ہے' : 'Offline / Local Mode Active'}
                   </h3>
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/40">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-                    Action Required
+                    Local Storage
                   </span>
                 </div>
                 <p className="text-xs mt-1.5 leading-relaxed text-amber-100/90 max-w-2xl">
                   {isUrdu
-                    ? 'ڈیٹا اس فون پر محفوظ ہو گیا ہے، لیکن گوگل فائر بیس رولز بلاک ہونے کی وجہ سے دوسرے فون یا کمپیوٹر پر ابھی نہیں پہنچ رہا۔ رولز پبلش کرتے ہی تمام ڈیوائسز فوری طور پر سنک ہو جائیں گی۔'
-                    : 'Settings are permanently saved on this device, but writes to Cloud Firestore are blocked by security rules. Publish the 3-line rules in Firebase Console to enable live sync across all phones & computers.'}
+                    ? 'ڈیٹا آپ کے فون میں محفوظ ہو گیا ہے۔ انٹرنیٹ کنکشن بحال ہوتے ہی کلاؤڈ ڈیٹا بیس خود بخود سنک ہو جائے گا۔'
+                    : 'Changes are safely stored on this device. Re-check your internet connection to sync with the universal cloud database.'}
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
-              {/* Direct Link to Firebase Rules */}
-              <a
-                href={firestoreRulesUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>{isUrdu ? '1-Click فائر بیس رولز کھولیں' : 'Open Firebase Rules'}</span>
-              </a>
-
-              {/* Copy Rules Code */}
-              <button
-                type="button"
-                onClick={handleCopyRules}
-                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-              >
-                {copiedRules ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedRules ? 'Copied ✓' : (isUrdu ? 'رولز کوڈ کاپی کریں' : 'Copy Rules')}</span>
-              </button>
-
-              {/* Test Cloud Write */}
               <button
                 type="button"
                 onClick={handleTestCloudWrite}
                 disabled={isTestingCloud}
-                className="px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isTestingCloud ? 'animate-spin' : ''}`} />
-                <span>{isTestingCloud ? 'Checking...' : (isUrdu ? 'دوبارہ ٹیسٹ کریں' : 'Re-check Sync')}</span>
+                <span>{isTestingCloud ? 'Checking...' : (isUrdu ? 'دوبارہ ٹیسٹ کریں' : 'Re-check Cloud Sync')}</span>
               </button>
 
-              {/* Instant Direct Device-to-Device Transfer */}
               <button
                 type="button"
                 onClick={() => setIsDeviceTransferModalOpen(true)}
                 className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-teal-200 border border-teal-500/30 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                title="Transfer settings directly to another device without Firebase"
               >
                 <Smartphone className="w-3.5 h-3.5" />
                 <span>{isUrdu ? 'ڈیوائس ٹرانسفر' : 'Device Transfer'}</span>
@@ -964,17 +940,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-bold text-white">
-                    Firebase Cloud Firestore & Storage Active
+                    {isUrdu ? 'لائیو کلاؤڈ ڈیٹا بیس اور ملٹی ڈیوائس سنک فعال ہے' : 'Live Cloud Database & Multi-Device Sync Active'}
                   </h3>
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live Multi-Device Sync Active
+                    Live Cloud Sync
                   </span>
                 </div>
                 <p className="text-xs mt-1 leading-relaxed text-teal-100/90">
                   {isUrdu
-                    ? 'تمام ترامیم تمام موبائلز، کمپیوٹرز اور نیٹلی فائی پر لائیو سنک ہو رہی ہیں۔'
-                    : 'All changes to hospital settings, doctors, departments, gallery images, and patient appointments sync in real-time across Netlify, phones, and computers via Cloud Firestore.'}
+                    ? 'ہسپتال کی تمام سیٹنگز، ڈاکٹرز، شعبہ جات، گیلری اور اپوائنٹمنٹس نیٹلی فائی اور تمام فونز اور کمپیوٹرز پر خود بخود لمحہ بہ لمحہ اپڈیٹ ہو رہے ہیں۔'
+                    : 'All hospital settings, doctors, departments, gallery images, and patient appointments sync in real time across Netlify, phones, and computers via the universal cloud database.'}
                 </p>
               </div>
             </div>
@@ -985,10 +961,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
                 onClick={handleImportLocalData}
                 disabled={isImporting}
                 className="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
-                title="Uploads and initializes the standard hospital catalog directly to Firebase Firestore"
+                title="Uploads and initializes the standard hospital catalog to the cloud database"
               >
                 <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-bounce' : ''}`} />
-                <span>{isImporting ? 'Importing Data...' : 'Import Data to Firebase'}</span>
+                <span>{isImporting ? (isUrdu ? 'سنک ہو رہا ہے...' : 'Syncing...') : (isUrdu ? 'کلاؤڈ پر محفوظ کریں' : 'Sync All to Cloud')}</span>
               </button>
 
               <button
@@ -998,7 +974,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
                 className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-colors cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>{isRefreshing ? 'Syncing...' : 'Sync Now'}</span>
+                <span>{isRefreshing ? (isUrdu ? 'اپڈیٹ ہو رہا ہے...' : 'Syncing...') : (isUrdu ? 'ابھی ریفریش کریں' : 'Sync Now')}</span>
               </button>
 
               <button
@@ -1007,7 +983,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
                 className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-teal-200 border border-teal-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Smartphone className="w-3.5 h-3.5" />
-                <span>Device Transfer</span>
+                <span>{isUrdu ? 'بیک اپ ٹرانسفر' : 'Device Transfer'}</span>
               </button>
             </div>
           </div>

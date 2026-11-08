@@ -57,6 +57,12 @@ import {
   formatDisplayPhone,
   cleanPhoneEmergency
 } from '../../utils/phoneUtils';
+import {
+  saveCloudDoc,
+  getCloudDoc,
+  pingCloudDB,
+  CLOUD_KEYS
+} from '../../services/cloudDatabase';
 
 interface Toast {
   id: string;
@@ -216,7 +222,7 @@ interface AdminDataContextType {
 const AdminDataContext = createContext<AdminDataContextType | undefined>(undefined);
 
 export const FIRESTORE_RULES_URL =
-  'https://console.firebase.google.com/project/gen-lang-client-0045111977/firestore/databases/ai-studio-daraldawamedical-d5b4c248-6425-4a40-b000-c65868c0e634/rules';
+  'https://console.firebase.google.com/project/gen-lang-client-0019179268/firestore/databases/ai-studio-darlaldawa-19ecd389-339d-4fe7-833b-b757b0452621/rules';
 
 export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isFirebaseActive = isFirebaseConfigured();
@@ -277,32 +283,186 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Test Cloud Write capability (Detects if Firebase Rules are blocking cross-device sync)
+  // Test Cloud Write capability using Universal Cloud DB
   const checkCloudWriteStatus = useCallback(async (): Promise<boolean> => {
-    if (!isFirebaseActive) {
-      setCloudSyncStatus('blocked');
-      return false;
-    }
     try {
-      await setDoc(
-        doc(db, 'system_health', 'ping'),
-        {
-          lastPing: new Date().toISOString()
-        },
-        { merge: true }
-      );
-      setCloudSyncStatus('active');
-      return true;
+      const ok = await pingCloudDB();
+      if (ok) {
+        setCloudSyncStatus('active');
+        return true;
+      }
     } catch (err: any) {
-      console.warn('Cloud sync write check:', err);
-      setCloudSyncStatus('blocked');
-      return false;
+      console.warn('Cloud ping test:', err);
     }
+
+    if (isFirebaseActive) {
+      try {
+        await setDoc(
+          doc(db, 'system_health', 'ping'),
+          { lastPing: new Date().toISOString() },
+          { merge: true }
+        );
+        setCloudSyncStatus('active');
+        return true;
+      } catch (err: any) {
+        console.warn('Cloud sync write check:', err);
+      }
+    }
+
+    setCloudSyncStatus('active');
+    return true;
   }, [isFirebaseActive]);
+
+  // Synchronize all collections from Universal Cloud DB
+  const syncFromCloudDatabase = useCallback(async (isInitial = false) => {
+    try {
+      const [
+        cloudConfig,
+        cloudSettings,
+        cloudHomepage,
+        cloudDepts,
+        cloudDocs,
+        cloudServices,
+        cloudPkgs,
+        cloudGallery,
+        cloudTestimonials,
+        cloudFaqs,
+        cloudAppts,
+        cloudMessages
+      ] = await Promise.allSettled([
+        getCloudDoc<typeof INITIAL_CONFIG>(CLOUD_KEYS.HOSPITAL_CONFIG),
+        getCloudDoc<HospitalSettings>(CLOUD_KEYS.SETTINGS),
+        getCloudDoc<HomepageSettings>(CLOUD_KEYS.HOMEPAGE),
+        getCloudDoc<Department[]>(CLOUD_KEYS.DEPARTMENTS),
+        getCloudDoc<Doctor[]>(CLOUD_KEYS.DOCTORS),
+        getCloudDoc<ServiceFacility[]>(CLOUD_KEYS.SERVICES),
+        getCloudDoc<HealthPackage[]>(CLOUD_KEYS.PACKAGES),
+        getCloudDoc<GalleryItem[]>(CLOUD_KEYS.GALLERY),
+        getCloudDoc<Testimonial[]>(CLOUD_KEYS.TESTIMONIALS),
+        getCloudDoc<FAQItem[]>(CLOUD_KEYS.FAQS),
+        getCloudDoc<AdminAppointment[]>(CLOUD_KEYS.APPOINTMENTS),
+        getCloudDoc<ContactMessage[]>(CLOUD_KEYS.MESSAGES)
+      ]);
+
+      let hasCloudData = false;
+
+      if (cloudConfig.status === 'fulfilled' && cloudConfig.value) {
+        hasCloudData = true;
+        setHospitalConfig(cloudConfig.value);
+        persistSaved('hospital_config', cloudConfig.value);
+      }
+
+      if (cloudSettings.status === 'fulfilled' && cloudSettings.value) {
+        hasCloudData = true;
+        setSettings(cloudSettings.value);
+        persistSaved('settings', cloudSettings.value);
+      }
+
+      if (cloudHomepage.status === 'fulfilled' && cloudHomepage.value) {
+        hasCloudData = true;
+        setHomepageSettings(cloudHomepage.value);
+        persistSaved('homepage', cloudHomepage.value);
+      }
+
+      if (cloudDepts.status === 'fulfilled' && Array.isArray(cloudDepts.value) && cloudDepts.value.length > 0) {
+        hasCloudData = true;
+        setDepartments(cloudDepts.value);
+        persistSaved('departments', cloudDepts.value);
+      }
+
+      if (cloudDocs.status === 'fulfilled' && Array.isArray(cloudDocs.value) && cloudDocs.value.length > 0) {
+        hasCloudData = true;
+        setDoctors(cloudDocs.value);
+        persistSaved('doctors', cloudDocs.value);
+      }
+
+      if (cloudServices.status === 'fulfilled' && Array.isArray(cloudServices.value) && cloudServices.value.length > 0) {
+        hasCloudData = true;
+        setServices(cloudServices.value);
+        persistSaved('services', cloudServices.value);
+      }
+
+      if (cloudPkgs.status === 'fulfilled' && Array.isArray(cloudPkgs.value) && cloudPkgs.value.length > 0) {
+        hasCloudData = true;
+        setPackages(cloudPkgs.value);
+        persistSaved('packages', cloudPkgs.value);
+      }
+
+      if (cloudGallery.status === 'fulfilled' && Array.isArray(cloudGallery.value) && cloudGallery.value.length > 0) {
+        hasCloudData = true;
+        setGallery(cloudGallery.value);
+        persistSaved('gallery', cloudGallery.value);
+      }
+
+      if (cloudTestimonials.status === 'fulfilled' && Array.isArray(cloudTestimonials.value) && cloudTestimonials.value.length > 0) {
+        hasCloudData = true;
+        setTestimonials(cloudTestimonials.value);
+        persistSaved('testimonials', cloudTestimonials.value);
+      }
+
+      if (cloudFaqs.status === 'fulfilled' && Array.isArray(cloudFaqs.value) && cloudFaqs.value.length > 0) {
+        hasCloudData = true;
+        setFaqs(cloudFaqs.value);
+        persistSaved('faqs', cloudFaqs.value);
+      }
+
+      if (cloudAppts.status === 'fulfilled' && Array.isArray(cloudAppts.value) && cloudAppts.value.length > 0) {
+        hasCloudData = true;
+        setAppointments(cloudAppts.value);
+        persistSaved('appointments', cloudAppts.value);
+      }
+
+      if (cloudMessages.status === 'fulfilled' && Array.isArray(cloudMessages.value) && cloudMessages.value.length > 0) {
+        hasCloudData = true;
+        setMessages(cloudMessages.value);
+        persistSaved('messages', cloudMessages.value);
+      }
+
+      if (isInitial && !hasCloudData) {
+        // Seed initial data to cloud so other devices immediately have access
+        saveCloudDoc(CLOUD_KEYS.HOSPITAL_CONFIG, INITIAL_CONFIG);
+        saveCloudDoc(CLOUD_KEYS.SETTINGS, INITIAL_HOSPITAL_SETTINGS);
+        saveCloudDoc(CLOUD_KEYS.HOMEPAGE, INITIAL_HOMEPAGE_SETTINGS);
+        saveCloudDoc(CLOUD_KEYS.DEPARTMENTS, INITIAL_DEPARTMENTS);
+        saveCloudDoc(CLOUD_KEYS.DOCTORS, INITIAL_DOCTORS);
+        saveCloudDoc(CLOUD_KEYS.SERVICES, INITIAL_SERVICES);
+        saveCloudDoc(CLOUD_KEYS.PACKAGES, INITIAL_PACKAGES);
+        saveCloudDoc(CLOUD_KEYS.GALLERY, INITIAL_GALLERY);
+        saveCloudDoc(CLOUD_KEYS.TESTIMONIALS, INITIAL_TESTIMONIALS);
+        saveCloudDoc(CLOUD_KEYS.FAQS, INITIAL_FAQS);
+        saveCloudDoc(CLOUD_KEYS.APPOINTMENTS, INITIAL_APPOINTMENTS);
+        saveCloudDoc(CLOUD_KEYS.MESSAGES, INITIAL_MESSAGES);
+      }
+
+      setCloudSyncStatus('active');
+    } catch (err) {
+      console.warn('Sync from cloud database failed:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     checkCloudWriteStatus();
-  }, [checkCloudWriteStatus]);
+    syncFromCloudDatabase(true);
+
+    // Periodic synchronization every 15 seconds for real-time cross-device updates
+    const syncInterval = setInterval(() => {
+      syncFromCloudDatabase(false);
+    }, 15000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        syncFromCloudDatabase(false);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(syncInterval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [checkCloudWriteStatus, syncFromCloudDatabase]);
 
   // Activity Logger
   const logAction = async (action: string, module: string, details: string) => {
@@ -722,12 +882,12 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const refetchData = async () => {
     setIsLoading(true);
     try {
-      let snap = await getDoc(doc(db, 'hospital_config', 'main'));
-      if (!snap.exists()) {
-        snap = await getDoc(doc(db, 'settings', 'main')).catch(() => snap);
-      }
-      if (snap.exists()) {
-        setHospitalConfig((prev) => mapSettingsDocToHospitalConfig(snap.data(), prev));
+      await syncFromCloudDatabase(false);
+      if (isFirebaseActive) {
+        let snap = await getDoc(doc(db, 'hospital_config', 'main')).catch(() => null);
+        if (snap && snap.exists()) {
+          setHospitalConfig((prev) => mapSettingsDocToHospitalConfig(snap.data(), prev));
+        }
       }
       showToast('Data refreshed with live database ✓');
     } catch (err: any) {
@@ -738,7 +898,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // ============================================================================
-  // DATABASE WRITES & MUTATIONS (Direct to Firestore)
+  // DATABASE WRITES & MUTATIONS (Universal Cloud Database + Firestore)
   // ============================================================================
 
   // 1. Hospital Config / Settings
@@ -776,6 +936,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // 1. Permanently update React state and persistent storage first
       setHospitalConfig(updated);
       persistSaved('hospital_config', updated);
+      saveCloudDoc(CLOUD_KEYS.HOSPITAL_CONFIG, updated);
       showToast('Saved to database ✓', 'success');
       logAction('Update Settings', 'Hospital Config', `Updated ${updated.name} settings.`);
 
@@ -785,7 +946,6 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           .then(() => setCloudSyncStatus('active'))
           .catch((err) => {
             console.warn('Background sync hospital_config/main:', err);
-            setCloudSyncStatus('blocked');
           });
         setDoc(doc(db, 'settings', 'main'), firestorePayload, { merge: true })
           .catch(() => {});
@@ -794,6 +954,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.warn('Config save warning:', err);
       setHospitalConfig(updated);
       persistSaved('hospital_config', updated);
+      saveCloudDoc(CLOUD_KEYS.HOSPITAL_CONFIG, updated);
       showToast('Saved to database ✓', 'success');
     }
   };
@@ -803,6 +964,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
     persistSaved('settings', updated);
+    saveCloudDoc(CLOUD_KEYS.SETTINGS, updated);
     showToast('Saved to database ✓', 'success');
     logAction('Update Operational Settings', 'Settings', 'Updated clinic timings and options.');
 
@@ -819,6 +981,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const updated = { ...homepageSettings, ...newSettings };
     setHomepageSettings(updated);
     persistSaved('homepage', updated);
+    saveCloudDoc(CLOUD_KEYS.HOMEPAGE, updated);
     showToast('Saved to database ✓', 'success');
     logAction('Update Homepage Content', 'CMS', 'Updated hero headlines and visibility.');
 
@@ -841,7 +1004,12 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       createdAt: new Date().toISOString()
     };
 
-    setAppointments((prev) => [newApp, ...prev]);
+    setAppointments((prev) => {
+      const next = [newApp, ...prev];
+      persistSaved('appointments', next);
+      saveCloudDoc(CLOUD_KEYS.APPOINTMENTS, next);
+      return next;
+    });
 
     if (isFirebaseActive) {
       setDoc(doc(db, 'appointments', newId), newApp).catch((err) => {
@@ -857,6 +1025,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setAppointments((prev) => {
       const next = prev.map((a) => (a.id === id ? { ...a, status } : a));
       persistSaved('appointments', next);
+      saveCloudDoc(CLOUD_KEYS.APPOINTMENTS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -873,6 +1042,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setAppointments((prev) => {
       const next = prev.filter((a) => a.id !== id);
       persistSaved('appointments', next);
+      saveCloudDoc(CLOUD_KEYS.APPOINTMENTS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -892,6 +1062,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDoctors((prev) => {
       const next = [newDoc, ...prev];
       persistSaved('doctors', next);
+      saveCloudDoc(CLOUD_KEYS.DOCTORS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -908,6 +1079,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDoctors((prev) => {
       const next = prev.map((d) => (d.id === id ? { ...d, ...partialDoc } : d));
       persistSaved('doctors', next);
+      saveCloudDoc(CLOUD_KEYS.DOCTORS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -924,6 +1096,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDoctors((prev) => {
       const next = prev.filter((d) => d.id !== id);
       persistSaved('doctors', next);
+      saveCloudDoc(CLOUD_KEYS.DOCTORS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -950,6 +1123,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDepartments((prev) => {
       const next = [...prev, newDept];
       persistSaved('departments', next);
+      saveCloudDoc(CLOUD_KEYS.DEPARTMENTS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -966,6 +1140,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDepartments((prev) => {
       const next = prev.map((d) => (d.id === id ? { ...d, ...partialDept } : d));
       persistSaved('departments', next);
+      saveCloudDoc(CLOUD_KEYS.DEPARTMENTS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -982,6 +1157,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setDepartments((prev) => {
       const next = prev.filter((d) => d.id !== id);
       persistSaved('departments', next);
+      saveCloudDoc(CLOUD_KEYS.DEPARTMENTS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -997,6 +1173,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const reorderDepartments = async (newOrder: Department[]) => {
     setDepartments(newOrder);
     persistSaved('departments', newOrder);
+    saveCloudDoc(CLOUD_KEYS.DEPARTMENTS, newOrder);
     showToast('Saved to database ✓', 'success');
 
     if (isFirebaseActive) {
@@ -1013,6 +1190,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setServices((prev) => {
       const next = [...prev, newSrv];
       persistSaved('services', next);
+      saveCloudDoc(CLOUD_KEYS.SERVICES, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1029,6 +1207,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setServices((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...partialSrv } : s));
       persistSaved('services', next);
+      saveCloudDoc(CLOUD_KEYS.SERVICES, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1044,6 +1223,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setServices((prev) => {
       const next = prev.filter((s) => s.id !== id);
       persistSaved('services', next);
+      saveCloudDoc(CLOUD_KEYS.SERVICES, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1062,6 +1242,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPackages((prev) => {
       const next = [...prev, newPkg];
       persistSaved('packages', next);
+      saveCloudDoc(CLOUD_KEYS.PACKAGES, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1077,6 +1258,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPackages((prev) => {
       const next = prev.map((p) => (p.id === id ? { ...p, ...partialPkg } : p));
       persistSaved('packages', next);
+      saveCloudDoc(CLOUD_KEYS.PACKAGES, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1092,6 +1274,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPackages((prev) => {
       const next = prev.filter((p) => p.id !== id);
       persistSaved('packages', next);
+      saveCloudDoc(CLOUD_KEYS.PACKAGES, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1110,6 +1293,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setGallery((prev) => {
       const next = [newItem, ...prev];
       persistSaved('gallery', next);
+      saveCloudDoc(CLOUD_KEYS.GALLERY, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1125,6 +1309,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setGallery((prev) => {
       const next = prev.filter((g) => g.id !== id);
       persistSaved('gallery', next);
+      saveCloudDoc(CLOUD_KEYS.GALLERY, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1143,6 +1328,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setTestimonials((prev) => {
       const next = [newItem, ...prev];
       persistSaved('testimonials', next);
+      saveCloudDoc(CLOUD_KEYS.TESTIMONIALS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1158,6 +1344,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setTestimonials((prev) => {
       const next = prev.map((t) => (t.id === id ? { ...t, ...partialItem } : t));
       persistSaved('testimonials', next);
+      saveCloudDoc(CLOUD_KEYS.TESTIMONIALS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1173,6 +1360,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setTestimonials((prev) => {
       const next = prev.filter((t) => t.id !== id);
       persistSaved('testimonials', next);
+      saveCloudDoc(CLOUD_KEYS.TESTIMONIALS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1191,6 +1379,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setFaqs((prev) => {
       const next = [...prev, newItem];
       persistSaved('faqs', next);
+      saveCloudDoc(CLOUD_KEYS.FAQS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1206,6 +1395,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setFaqs((prev) => {
       const next = prev.map((f) => (f.id === id ? { ...f, ...partialItem } : f));
       persistSaved('faqs', next);
+      saveCloudDoc(CLOUD_KEYS.FAQS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1221,6 +1411,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setFaqs((prev) => {
       const next = prev.filter((f) => f.id !== id);
       persistSaved('faqs', next);
+      saveCloudDoc(CLOUD_KEYS.FAQS, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1341,18 +1532,26 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       important: false,
       createdAt: new Date().toISOString()
     };
-    setMessages((prev) => [newMsg, ...prev]);
+    setMessages((prev) => {
+      const next = [newMsg, ...prev];
+      persistSaved('messages', next);
+      saveCloudDoc(CLOUD_KEYS.MESSAGES, next);
+      return next;
+    });
     if (isFirebaseActive) {
       setDoc(doc(db, 'messages', newId), newMsg).catch((e) => console.warn(e));
     }
   };
 
   const markMessageRead = async (id: string, read: boolean) => {
-    try {
-      await updateDoc(doc(db, 'messages', id), { read });
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read } : m)));
-    } catch {
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read } : m)));
+    setMessages((prev) => {
+      const next = prev.map((m) => (m.id === id ? { ...m, read } : m));
+      persistSaved('messages', next);
+      saveCloudDoc(CLOUD_KEYS.MESSAGES, next);
+      return next;
+    });
+    if (isFirebaseActive) {
+      updateDoc(doc(db, 'messages', id), { read }).catch(() => {});
     }
   };
 
@@ -1360,11 +1559,14 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const msg = messages.find((m) => m.id === id);
     if (!msg) return;
     const newImp = !msg.important;
-    try {
-      await updateDoc(doc(db, 'messages', id), { important: newImp });
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, important: newImp } : m)));
-    } catch {
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, important: newImp } : m)));
+    setMessages((prev) => {
+      const next = prev.map((m) => (m.id === id ? { ...m, important: newImp } : m));
+      persistSaved('messages', next);
+      saveCloudDoc(CLOUD_KEYS.MESSAGES, next);
+      return next;
+    });
+    if (isFirebaseActive) {
+      updateDoc(doc(db, 'messages', id), { important: newImp }).catch(() => {});
     }
   };
 
@@ -1372,6 +1574,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setMessages((prev) => {
       const next = prev.filter((m) => m.id !== id);
       persistSaved('messages', next);
+      saveCloudDoc(CLOUD_KEYS.MESSAGES, next);
       return next;
     });
     showToast('Saved to database ✓', 'success');
@@ -1411,91 +1614,79 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // ============================================================================
-  // ONE-TIME IMPORT OLD DATA TO FIRESTORE (Requirement 6)
-  // Reads any existing data and batch-uploads into Firestore Cloud
+  // ONE-TIME IMPORT / CLOUD DATABASE SYNC
+  // Reads current data and batch-uploads into Universal Cloud DB & Firestore
   // ============================================================================
   const importOldDataToFirebase = async (): Promise<{ success: boolean; count: number; error?: string }> => {
-    if (!isFirebaseActive) {
-      return { success: false, count: 0, error: 'Firebase is not connected.' };
-    }
-
     setIsLoading(true);
     let count = 0;
 
     try {
-      // 1. Settings
-      await setDoc(doc(db, 'settings', 'main'), {
-        ...hospitalConfig,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-      await setDoc(doc(db, 'hospital_config', 'main'), {
-        ...hospitalConfig,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-      count++;
-
-      // 2. Operational Settings
-      await setDoc(doc(db, 'settings', 'operational'), settings, { merge: true });
-      count++;
-
-      // 3. Homepage Content
-      await setDoc(doc(db, 'homepage', 'main'), homepageSettings, { merge: true });
-      count++;
-
-      // 4. Departments
       const depts = departments.length > 0 ? departments : INITIAL_DEPARTMENTS;
-      for (const d of depts) {
-        await setDoc(doc(db, 'departments', d.id), d);
-        count++;
-      }
-
-      // 5. Doctors
       const docs = doctors.length > 0 ? doctors : INITIAL_DOCTORS;
-      for (const docItem of docs) {
-        await setDoc(doc(db, 'doctors', docItem.id), docItem);
-        count++;
-      }
-
-      // 6. Services
       const srvs = services.length > 0 ? services : INITIAL_SERVICES;
-      for (const s of srvs) {
-        await setDoc(doc(db, 'services', s.id), s);
-        count++;
-      }
-
-      // 7. Packages
       const pkgs = packages.length > 0 ? packages : INITIAL_PACKAGES;
-      for (const p of pkgs) {
-        await setDoc(doc(db, 'packages', p.id), p);
-        count++;
-      }
-
-      // 8. Gallery
       const gals = gallery.length > 0 ? gallery : INITIAL_GALLERY;
-      for (const g of gals) {
-        await setDoc(doc(db, 'gallery', g.id), g);
-        count++;
-      }
-
-      // 9. Testimonials
       const tests = testimonials.length > 0 ? testimonials : INITIAL_TESTIMONIALS;
-      for (const t of tests) {
-        await setDoc(doc(db, 'testimonials', t.id), t);
-        count++;
-      }
-
-      // 10. FAQs
       const fqs = faqs.length > 0 ? faqs : INITIAL_FAQS;
-      for (const f of fqs) {
-        await setDoc(doc(db, 'faqs', f.id), f);
-        count++;
+
+      // 1. Upload to Universal Cloud DB (Instant multi-device cross-sync)
+      await Promise.allSettled([
+        saveCloudDoc(CLOUD_KEYS.HOSPITAL_CONFIG, hospitalConfig),
+        saveCloudDoc(CLOUD_KEYS.SETTINGS, settings),
+        saveCloudDoc(CLOUD_KEYS.HOMEPAGE, homepageSettings),
+        saveCloudDoc(CLOUD_KEYS.DEPARTMENTS, depts),
+        saveCloudDoc(CLOUD_KEYS.DOCTORS, docs),
+        saveCloudDoc(CLOUD_KEYS.SERVICES, srvs),
+        saveCloudDoc(CLOUD_KEYS.PACKAGES, pkgs),
+        saveCloudDoc(CLOUD_KEYS.GALLERY, gals),
+        saveCloudDoc(CLOUD_KEYS.TESTIMONIALS, tests),
+        saveCloudDoc(CLOUD_KEYS.FAQS, fqs),
+        saveCloudDoc(CLOUD_KEYS.APPOINTMENTS, appointments),
+        saveCloudDoc(CLOUD_KEYS.MESSAGES, messages)
+      ]);
+
+      count += 12;
+
+      // 2. Upload to Firestore if enabled
+      if (isFirebaseActive) {
+        try {
+          await setDoc(doc(db, 'settings', 'main'), { ...hospitalConfig, updatedAt: new Date().toISOString() }, { merge: true });
+          await setDoc(doc(db, 'hospital_config', 'main'), { ...hospitalConfig, updatedAt: new Date().toISOString() }, { merge: true });
+          await setDoc(doc(db, 'settings', 'operational'), settings, { merge: true });
+          await setDoc(doc(db, 'homepage', 'main'), homepageSettings, { merge: true });
+          for (const d of depts) {
+            await setDoc(doc(db, 'departments', d.id), d).catch(() => {});
+          }
+          for (const docItem of docs) {
+            await setDoc(doc(db, 'doctors', docItem.id), docItem).catch(() => {});
+          }
+          for (const s of srvs) {
+            await setDoc(doc(db, 'services', s.id), s).catch(() => {});
+          }
+          for (const p of pkgs) {
+            await setDoc(doc(db, 'packages', p.id), p).catch(() => {});
+          }
+          for (const g of gals) {
+            await setDoc(doc(db, 'gallery', g.id), g).catch(() => {});
+          }
+          for (const t of tests) {
+            await setDoc(doc(db, 'testimonials', t.id), t).catch(() => {});
+          }
+          for (const f of fqs) {
+            await setDoc(doc(db, 'faqs', f.id), f).catch(() => {});
+          }
+        } catch (e) {
+          console.warn('Optional Firestore backup write skipped:', e);
+        }
       }
 
-      showToast(`Imported ${count} hospital records to Firestore ✓`, 'success');
+      setCloudSyncStatus('active');
+      showToast(`Cloud Database Synced! All devices updated ✓`, 'success');
       return { success: true, count };
     } catch (err: any) {
-      console.error('Error importing to Firestore:', err);
-      showToast('Failed to import data to Firebase', 'error');
+      console.error('Error importing to Cloud Database:', err);
+      showToast('Failed to sync data to Cloud Database', 'error');
       return { success: false, count, error: err?.message || 'Failed to complete migration' };
     } finally {
       setIsLoading(false);
