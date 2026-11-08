@@ -4,7 +4,9 @@ import {
   signInWithEmailAndPassword,
   signOut as fbSignOut,
   sendPasswordResetEmail,
-  onAuthStateChanged
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import {
   collection,
@@ -36,6 +38,7 @@ interface PatientAuthContextType {
     city: string;
   }) => Promise<{ success: boolean; error?: string }>;
   login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   updateProfile: (updates: Partial<PatientProfile>) => Promise<{ success: boolean; error?: string }>;
@@ -52,7 +55,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [myAppointments, setMyAppointments] = useState<PatientAppointment[]>([]);
 
   // Fetch patient profile from Firestore 'patients' collection
-  const fetchPatientProfile = useCallback(async (userId: string, userEmail?: string) => {
+  const fetchPatientProfile = useCallback(async (userId: string, userEmail?: string, userDisplayName?: string) => {
     try {
       const patientRef = doc(db, 'patients', userId);
       const snap = await getDoc(patientRef);
@@ -68,7 +71,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const profile: PatientProfile = {
           id: snap.id,
           email: data.email || userEmail || '',
-          fullName: data.full_name || data.name || data.fullName || '',
+          fullName: data.full_name || data.name || data.fullName || userDisplayName || '',
           phone: data.phone || '',
           gender: data.gender || 'Male',
           dateOfBirth: data.date_of_birth || data.dateOfBirth || undefined,
@@ -80,18 +83,51 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         tagPatientDevice(profile.id, profile.email);
         return { profile };
       } else if (userEmail && userEmail !== 'admin@daraldawa.com') {
-        // Fallback: If auth user exists but patient doc was not yet created
-        const tempProfile: PatientProfile = {
+        // Automatically create patient record in Firestore 'patients' collection for new Google or authenticated users
+        const cleanName = userDisplayName || userEmail.split('@')[0] || 'Patient';
+        const newPatientDoc = {
           id: userId,
           email: userEmail,
-          fullName: userEmail.split('@')[0],
+          fullName: cleanName,
+          name: cleanName,
           phone: '',
           gender: 'Male',
           city: 'Lahore',
+          address: 'Lahore',
+          isBlocked: false,
           createdAt: new Date().toISOString()
         };
-        setPatient(tempProfile);
-        return { profile: tempProfile };
+        await setDoc(patientRef, newPatientDoc);
+
+        // Add welcome notification
+        try {
+          const notifsRef = collection(db, 'notifications');
+          await addDoc(notifsRef, {
+            userId,
+            role: 'patient',
+            title: 'Welcome to Dar al Dawa Medical Center',
+            message: `Hello ${cleanName}, your patient portal is now active. You can manage your appointments and view reports online.`,
+            type: 'patient_registered',
+            read: false,
+            createdAt: new Date().toISOString()
+          });
+        } catch {
+          // ignore
+        }
+
+        const profile: PatientProfile = {
+          id: userId,
+          email: userEmail,
+          fullName: cleanName,
+          phone: '',
+          gender: 'Male',
+          city: 'Lahore',
+          isBlocked: false,
+          createdAt: newPatientDoc.createdAt
+        };
+        setPatient(profile);
+        tagPatientDevice(profile.id, profile.email);
+        return { profile };
       }
     } catch (err) {
       console.error('Failed to load patient record from Firestore:', err);
@@ -106,7 +142,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser && firebaseUser.email !== 'admin@daraldawa.com') {
-          await fetchPatientProfile(firebaseUser.uid, firebaseUser.email || undefined);
+          await fetchPatientProfile(firebaseUser.uid, firebaseUser.email || undefined, firebaseUser.displayName || undefined);
         } else if (!firebaseUser) {
           setPatient(null);
           setMyAppointments([]);
@@ -300,6 +336,54 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
+  // Google Sign In / Sign Up
+  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!isFirebaseConfigured()) {
+      return { success: false, error: 'Database is not connected.' };
+    }
+
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
+
+      if (user.email === 'admin@daraldawa.com') {
+        await fbSignOut(auth);
+        return {
+          success: false,
+          error: 'Administrator accounts must sign in via the Staff Admin Portal.'
+        };
+      }
+
+      const res = await fetchPatientProfile(
+        user.uid,
+        user.email || undefined,
+        user.displayName || undefined
+      );
+
+      if (res?.blocked) {
+        return {
+          success: false,
+          error: 'Your patient account has been suspended by hospital administration. Please contact reception.'
+        };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.warn('Google sign-in error:', err);
+      let message = err.message || 'Google sign-in failed.';
+      if (err.code === 'auth/popup-closed-by-user') {
+        message = 'Google sign-in popup was closed before completing.';
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        message = 'Only one sign-in window at a time is allowed.';
+      } else if (err.code === 'auth/popup-blocked') {
+        message = 'Popup was blocked by your browser. Please allow popups for this site.';
+      }
+      return { success: false, error: message };
+    }
+  };
+
   // Logout
   const logout = async () => {
     try {
@@ -433,6 +517,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         isLoading,
         signUp,
         login,
+        loginWithGoogle,
         logout,
         forgotPassword,
         updateProfile,
