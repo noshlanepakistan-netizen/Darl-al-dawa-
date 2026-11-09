@@ -14,6 +14,9 @@ import { NotificationItem, NotificationSettings } from '../types/notification';
 import { db, isFirebaseConfigured } from '../firebase/config';
 import { playNotificationChime } from '../utils/audioChime';
 import { initOneSignal } from '../utils/oneSignal';
+import { Bell, X } from 'lucide-react';
+import { usePatientAuth } from './PatientAuthContext';
+import { cleanWhatsAppNumber } from '../utils/phoneUtils';
 
 interface NotificationContextType {
   notifications: NotificationItem[];
@@ -50,10 +53,24 @@ export const NotificationProvider: React.FC<{
   children: React.ReactNode;
   userRole?: 'admin' | 'patient' | 'guest';
   userId?: string;
-}> = ({ children, userRole = 'guest', userId }) => {
+}> = ({ children, userRole: propUserRole = 'guest', userId: propUserId }) => {
+  const { patient, isAuthenticated: isPatientAuth } = usePatientAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [activeAlert, setActiveAlert] = useState<NotificationItem | null>(null);
   const isFirstLoadRef = useRef<boolean>(true);
   const knownIdsRef = useRef<Set<string>>(new Set());
+
+  // Determine active role dynamically:
+  // If user is logged into admin panel -> 'admin'
+  // If user is logged in as patient -> 'patient'
+  // Otherwise -> 'guest'
+  const isAdminLoggedIn = typeof window !== 'undefined' && localStorage.getItem('dad_admin_session_auth') === 'true';
+  const effectiveRole: 'admin' | 'patient' | 'guest' =
+    propUserRole && propUserRole !== 'guest'
+      ? propUserRole
+      : (isAdminLoggedIn ? 'admin' : (isPatientAuth && patient ? 'patient' : 'guest'));
+
+  const effectiveUserId = propUserId || (effectiveRole === 'patient' ? patient?.id : (effectiveRole === 'admin' ? 'admin' : undefined));
 
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
     try {
@@ -63,6 +80,15 @@ export const NotificationProvider: React.FC<{
       return DEFAULT_SETTINGS;
     }
   });
+
+  // Auto-dismiss floating alert card after 6.5 seconds
+  useEffect(() => {
+    if (!activeAlert) return;
+    const timer = setTimeout(() => {
+      setActiveAlert(null);
+    }, 6500);
+    return () => clearTimeout(timer);
+  }, [activeAlert]);
 
   // Initialize OneSignal on mount
   useEffect(() => {
@@ -82,17 +108,25 @@ export const NotificationProvider: React.FC<{
         (snapshot) => {
           const list: NotificationItem[] = [];
           let hasNewRelevantItem = false;
+          let newestAlertItem: NotificationItem | null = null;
 
-          snapshot.forEach((docSnap) => {
+          for (const docSnap of snapshot.docs) {
             const data = docSnap.data();
             const id = docSnap.id;
             const itemRole = data.role || 'all';
             const itemUserId = data.userId || data.user_id;
+            const itemPhone = data.phone ? cleanWhatsAppNumber(data.phone) : '';
+            const currentPatientPhone = patient?.phone ? cleanWhatsAppNumber(patient.phone) : '';
 
             // Check if this notification is relevant to this user
-            const isForAdmin = userRole === 'admin' && (itemRole === 'admin' || itemRole === 'all' || itemUserId === 'admin');
-            const isForPatient = userRole === 'patient' && (itemUserId === userId || itemRole === 'patient' || itemRole === 'all');
-            const isForGuest = userRole === 'guest' && itemRole === 'all';
+            const isForAdmin = effectiveRole === 'admin' && (itemRole === 'admin' || itemRole === 'all' || itemUserId === 'admin');
+            const isForPatient = effectiveRole === 'patient' && (
+              itemRole === 'patient' ||
+              itemRole === 'all' ||
+              (effectiveUserId && itemUserId === effectiveUserId) ||
+              (itemPhone && currentPatientPhone && itemPhone === currentPatientPhone)
+            );
+            const isForGuest = effectiveRole === 'guest' && itemRole === 'all';
 
             if (isForAdmin || isForPatient || isForGuest) {
               const notif: NotificationItem = {
@@ -110,16 +144,54 @@ export const NotificationProvider: React.FC<{
 
               if (!isFirstLoadRef.current && !knownIdsRef.current.has(id) && !notif.read) {
                 hasNewRelevantItem = true;
+                if (!newestAlertItem) newestAlertItem = notif;
               }
               knownIdsRef.current.add(id);
             }
-          });
+          }
 
           setNotifications(list);
 
-          // Play gentle audio chime if new notification arrived after initial load
-          if (hasNewRelevantItem && notificationSettings.soundEnabled) {
-            playNotificationChime();
+          // Deliver immediate multi-sensory notification to phone/desktop
+          const itemToAlert: NotificationItem | null = newestAlertItem;
+          if (hasNewRelevantItem && itemToAlert) {
+            // 1. Play pleasant audio chime
+            if (notificationSettings.soundEnabled) {
+              playNotificationChime();
+            }
+
+            // 2. Vibrate phone (haptic feedback on mobile)
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+              try {
+                navigator.vibrate([200, 100, 200]);
+              } catch {}
+            }
+
+            // 3. Trigger native browser push notification if permitted
+            if (typeof window !== 'undefined' && 'Notification' in window) {
+              const alertTitle = itemToAlert.title || 'Dar al Dawa Medical Center';
+              const alertBody = itemToAlert.message || 'You have a new hospital notification.';
+              try {
+                if (Notification.permission === 'granted') {
+                  new Notification(alertTitle, {
+                    body: alertBody,
+                    icon: '/favicon.ico'
+                  });
+                } else if (Notification.permission === 'default') {
+                  Notification.requestPermission().then((perm) => {
+                    if (perm === 'granted') {
+                      new Notification(alertTitle, {
+                        body: alertBody,
+                        icon: '/favicon.ico'
+                      });
+                    }
+                  });
+                }
+              } catch {}
+            }
+
+            // 4. Show instant floating alert on screen
+            setActiveAlert(itemToAlert);
           }
 
           isFirstLoadRef.current = false;
@@ -133,7 +205,7 @@ export const NotificationProvider: React.FC<{
     } catch (err) {
       console.warn('Failed to attach Firestore notification listener:', err);
     }
-  }, [userRole, userId, notificationSettings.soundEnabled]);
+  }, [effectiveRole, effectiveUserId, patient?.phone, notificationSettings.soundEnabled]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -211,7 +283,7 @@ export const NotificationProvider: React.FC<{
     playNotificationChime();
     await createNotification({
       role,
-      userId: role === 'admin' ? 'admin' : userId,
+      userId: role === 'admin' ? 'admin' : effectiveUserId,
       title: 'Dar al Dawa Hospital Alert Test',
       message: `System notification test dispatched at ${new Date().toLocaleTimeString()}. Audio chime and live real-time sync verified via Cloud Firestore.`,
       type: 'system'
@@ -232,6 +304,39 @@ export const NotificationProvider: React.FC<{
         sendTestNotification
       }}
     >
+      {/* Floating Instant Alert Banner across Phone / Desktop Screen */}
+      {activeAlert && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="fixed top-3 sm:top-5 left-1/2 -translate-x-1/2 z-[9999] w-[94%] max-w-md animate-in slide-in-from-top-4 fade-in duration-300"
+        >
+          <div className="bg-slate-900/95 backdrop-blur-md text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl border border-emerald-500/50 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Bell className="w-5 h-5 animate-bounce" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-bold text-xs sm:text-sm text-emerald-300 truncate">
+                  {activeAlert.title}
+                </h4>
+                <span className="text-[10px] text-slate-400 shrink-0 font-mono">Just now</span>
+              </div>
+              <p className="text-xs text-slate-200 mt-1 leading-relaxed">
+                {activeAlert.message}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveAlert(null)}
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 shrink-0 cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </aside>
+      )}
       {children}
     </NotificationContext.Provider>
   );

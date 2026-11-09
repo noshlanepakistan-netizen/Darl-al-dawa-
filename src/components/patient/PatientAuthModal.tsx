@@ -72,10 +72,26 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
           onClose();
         }, 800);
       } else {
-        setError(res.error || 'Google sign-in failed.');
+        if (res.error === 'UNAUTHORIZED_DOMAIN' || res.error?.includes('unauthorized-domain')) {
+          setError(
+            isUrdu
+              ? 'براہ کرم اپنا موبائل نمبر یا ای میل درج کر کے براہ راست رجسٹر یا لاگ ان کریں۔'
+              : 'Please enter your mobile number or email below to register or sign in directly.'
+          );
+        } else {
+          setError(res.error || 'Google sign-in failed.');
+        }
       }
     } catch (err: any) {
-      setError(err?.message || 'Google sign-in failed.');
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        setError(
+          isUrdu
+            ? 'براہ کرم اپنا موبائل نمبر یا ای میل درج کر کے براہ راست رجسٹر یا لاگ ان کریں۔'
+            : 'Please enter your mobile number or email below to register or sign in directly.'
+        );
+      } else {
+        setError(err?.message || 'Google sign-in failed.');
+      }
     } finally {
       setGoogleLoading(false);
     }

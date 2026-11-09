@@ -63,8 +63,8 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   // Auto-fill if patient logs in afterwards
   useEffect(() => {
     if (isAuthenticated && patient) {
-      if (!patientName) setPatientName(patient.fullName);
-      if (!phone) setPhone(patient.phone);
+      if (patient.fullName) setPatientName(patient.fullName);
+      if (patient.phone) setPhone(patient.phone);
     }
   }, [isAuthenticated, patient]);
 
@@ -85,10 +85,10 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   // Doctors matching current department
   const availableDoctors = docsList.filter((d) => d.departmentId === departmentId && d.active !== false);
 
-  // Validate Pakistani phone
+  // Validate Pakistani phone (accepts 03XX, +923XX, 923XX, 3XX, with any spaces or dashes)
   const validatePakistaniPhone = (value: string): boolean => {
-    const clean = value.replace(/[\s-]/g, '');
-    return /^03[0-9]{9}$/.test(clean) || /^\+923[0-9]{9}$/.test(clean);
+    const digits = value.replace(/\D/g, '');
+    return digits.length >= 10 && digits.length <= 13;
   };
 
   const handlePhoneChange = (val: string) => {
@@ -121,6 +121,14 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
       return;
     }
 
+    const digits = phone.replace(/\D/g, '');
+    let finalPhone = phone.trim();
+    if (digits.length === 10 && digits.startsWith('3')) {
+      finalPhone = '0' + digits;
+    } else if (digits.length === 12 && digits.startsWith('923')) {
+      finalPhone = '0' + digits.slice(2);
+    }
+
     // Generate simulated Token ID
     const randomToken = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
     setAppointmentToken(randomToken);
@@ -130,14 +138,14 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
       token: randomToken,
       patientId: patient?.id || '',
       patientName: patientName.trim(),
-      phone: phone.trim(),
+      phone: finalPhone,
       cnic: cnic.trim(),
-      departmentId,
-      doctorId: doctorId || undefined,
-      appointmentDate,
-      timeSlot,
-      patientType,
-      notes,
+      departmentId: departmentId || 'cardiology',
+      doctorId: doctorId || '',
+      appointmentDate: appointmentDate || new Date().toISOString().split('T')[0],
+      timeSlot: timeSlot || 'morning',
+      patientType: patientType || 'new',
+      notes: notes.trim(),
       status: 'pending'
     });
 

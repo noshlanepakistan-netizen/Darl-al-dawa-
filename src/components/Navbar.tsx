@@ -308,14 +308,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
-          {/* Customer / Patient Account Button (Desktop) — Positioned right next to Language Button */}
+          {/* Customer / Patient Account Button (Desktop) — Shows Patient Name when logged in */}
           <button
             onClick={isAuthenticated ? onOpenPatientDashboard : onOpenPatientAuth}
             type="button"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 xl:py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 whitespace-nowrap shadow-2xs"
-            title={isAuthenticated ? (isUrdu ? "میرا اکاؤنٹ" : "My Account") : (isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register")}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 xl:py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 whitespace-nowrap shadow-2xs max-w-[170px]"
+            title={isAuthenticated ? (patient?.fullName || (isUrdu ? "میرا اکاؤنٹ" : "My Account")) : (isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register")}
           >
-            <div className="relative flex items-center justify-center">
+            <div className="relative flex items-center justify-center shrink-0">
               {isAuthenticated && patient?.fullName ? (
                 <span className="w-4 h-4 rounded-full bg-[#1E5AA8] text-white text-[9px] font-bold flex items-center justify-center shrink-0">
                   {patient.fullName.trim().charAt(0).toUpperCase()}
@@ -327,8 +327,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#2E9E5B] ring-1 ring-white" />
               )}
             </div>
-            <span className={isUrdu ? 'font-urdu' : ''}>
-              {isUrdu ? 'اکاؤنٹ' : 'Account'}
+            <span className={`truncate max-w-[120px] ${isUrdu ? 'font-urdu' : ''}`}>
+              {isAuthenticated && patient?.fullName
+                ? patient.fullName
+                : (isUrdu ? 'اکاؤنٹ' : 'Account')}
             </span>
           </button>
 
@@ -350,22 +352,27 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={isAuthenticated ? onOpenPatientDashboard : onOpenPatientAuth}
             type="button"
-            className="relative flex items-center justify-center w-8 h-8 min-[360px]:w-8.5 min-[360px]:h-8.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
-            title={isAuthenticated ? (isUrdu ? "مریض اکاؤنٹ" : "My Account") : (isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register")}
+            className="relative flex items-center justify-center gap-1.5 h-8 min-[360px]:h-8.5 px-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            title={isAuthenticated ? (patient?.fullName || (isUrdu ? "مریض اکاؤنٹ" : "My Account")) : (isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register")}
             aria-label="Patient Account"
           >
             {isAuthenticated && patient?.fullName ? (
-              <span className="w-5 h-5 rounded-full bg-[#1E5AA8] text-white text-[10px] font-bold flex items-center justify-center">
-                {patient.fullName.trim().charAt(0).toUpperCase()}
-              </span>
+              <>
+                <span className="w-5 h-5 rounded-full bg-[#1E5AA8] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                  {patient.fullName.trim().charAt(0).toUpperCase()}
+                </span>
+                <span className="font-bold text-[11px] text-slate-800 max-w-[70px] truncate hidden min-[380px]:inline">
+                  {patient.fullName.trim().split(' ')[0]}
+                </span>
+              </>
             ) : (
               <User className="w-4 h-4 text-[#1E5AA8]" />
             )}
             {isAuthenticated && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#2E9E5B] ring-1.5 ring-white" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#2E9E5B] ring-1.5 ring-white" />
             )}
             {unreadCount > 0 && !isAuthenticated && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-1.5 ring-white" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 ring-1.5 ring-white" />
             )}
           </button>
 

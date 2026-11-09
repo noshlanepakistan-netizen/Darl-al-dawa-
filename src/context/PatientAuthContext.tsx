@@ -24,6 +24,17 @@ import { PatientProfile, PatientAppointment } from '../types/patient';
 import { auth, db, isFirebaseConfigured } from '../firebase/config';
 import { tagPatientDevice, logoutOneSignal } from '../utils/oneSignal';
 import { cleanWhatsAppNumber } from '../utils/phoneUtils';
+import { playNotificationChime } from '../utils/audioChime';
+
+export const normalizePhone = (input: string): string => {
+  let digits = input.replace(/\D/g, '');
+  if (digits.startsWith('923') && digits.length >= 12) {
+    digits = '0' + digits.slice(2);
+  } else if (digits.startsWith('3') && digits.length === 10) {
+    digits = '0' + digits;
+  }
+  return digits;
+};
 
 interface PatientAuthContextType {
   patient: PatientProfile | null;
@@ -69,11 +80,12 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
           return { blocked: true };
         }
 
+        const resolvedName = (data.fullName || data.name || data.full_name || userDisplayName || '').toString().trim();
         const profile: PatientProfile = {
           id: snap.id,
           email: data.email || userEmail || '',
-          fullName: data.full_name || data.name || data.fullName || userDisplayName || '',
-          phone: data.phone || '',
+          fullName: resolvedName || 'Patient',
+          phone: (data.phone || data.mobile || data.phoneNumber || '').toString().trim(),
           gender: data.gender || 'Male',
           dateOfBirth: data.date_of_birth || data.dateOfBirth || undefined,
           city: data.city || data.address || 'Lahore',
@@ -81,6 +93,9 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
           createdAt: data.created_at || data.createdAt || new Date().toISOString()
         };
         setPatient(profile);
+        try {
+          localStorage.setItem('dad_patient_session_user', JSON.stringify(profile));
+        } catch {}
         tagPatientDevice(profile.id, profile.email);
         return { profile };
       } else if (userEmail && userEmail !== 'admin@daraldawa.com') {
@@ -271,10 +286,10 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return { success: false, error: 'Database is not connected.' };
     }
 
-    const cleanPhone = params.phone.replace(/\D/g, '');
+    const cleanPhone = normalizePhone(params.phone);
     let cleanEmail = (params.email || '').trim().toLowerCase();
 
-    // If no email was provided or invalid, map to virtual patient email using phone number
+    // If no email was provided or invalid, map to virtual patient email using normalized phone number
     if (!cleanEmail || !cleanEmail.includes('@')) {
       cleanEmail = `${cleanPhone || 'patient' + Date.now()}@daraldawa.patient`;
     }
@@ -310,9 +325,10 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         await addDoc(notifsRef, {
           userId: uid,
           role: 'patient',
-          title: 'Welcome to Dar al Dawa Medical Center',
-          message: `Hello ${params.fullName}, your patient portal is now active. You can manage your appointments and view reports online.`,
+          title: 'Account Created Successfully 🎉',
+          message: `Welcome ${params.fullName}! Your Dar al Dawa patient account has been created successfully. You can now book appointments and view reports online.`,
           type: 'patient_registered',
+          phone: params.phone.trim(),
           read: false,
           createdAt: new Date().toISOString()
         });
@@ -320,9 +336,10 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         await addDoc(notifsRef, {
           userId: 'admin',
           role: 'admin',
-          title: 'New Patient Registration',
+          title: 'New Patient Account Created 👤',
           message: `${params.fullName} (${params.phone}) registered a new patient account from ${params.city}.`,
           type: 'patient_registered',
+          phone: params.phone.trim(),
           read: false,
           createdAt: new Date().toISOString()
         });
@@ -343,7 +360,36 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
       };
 
       setPatient(newProfile);
+      try {
+        localStorage.setItem('dad_patient_session_user', JSON.stringify(newProfile));
+      } catch {}
       tagPatientDevice(uid, cleanEmail);
+
+      // Trigger phone vibration, audio chime, and native system notification
+      try {
+        playNotificationChime();
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          navigator.vibrate([250, 100, 250]);
+        }
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          if (Notification.permission === 'granted') {
+            new Notification('Dar al Dawa Medical Center 🎉', {
+              body: `Welcome ${params.fullName}! Your patient account is now active.`,
+              icon: '/favicon.ico'
+            });
+          } else if (Notification.permission === 'default') {
+            Notification.requestPermission().then((perm) => {
+              if (perm === 'granted') {
+                new Notification('Dar al Dawa Medical Center 🎉', {
+                  body: `Welcome ${params.fullName}! Your patient account is now active.`,
+                  icon: '/favicon.ico'
+                });
+              }
+            });
+          }
+        }
+      } catch {}
+
       return { success: true };
     } catch (err: any) {
       let message = err.message || 'Registration failed';
@@ -369,7 +415,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     // Convert phone number to virtual email if no '@' present
     if (!clean.includes('@')) {
-      const digits = clean.replace(/\D/g, '');
+      const digits = normalizePhone(clean);
       if (digits.length < 9) {
         return {
           success: false,
@@ -445,60 +491,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
       } else if (err.code === 'auth/popup-blocked') {
         message = 'Popup was blocked by your browser. Please allow popups for this site.';
       } else if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
-        // Domain is not authorized for Google popup (e.g. Netlify preview).
-        // Seamlessly register and log in the patient directly into Firestore without any error or block!
-        let patientId = localStorage.getItem('dad_patient_device_uid');
-        if (!patientId) {
-          patientId = `patient_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-          localStorage.setItem('dad_patient_device_uid', patientId);
-        }
-
-        const patientDoc = {
-          id: patientId,
-          email: 'patient@daraldawa.pk',
-          fullName: 'Verified Patient',
-          name: 'Verified Patient',
-          phone: '',
-          gender: 'Male' as const,
-          city: 'Lahore',
-          address: 'Lahore',
-          isBlocked: false,
-          createdAt: new Date().toISOString()
-        };
-
-        try {
-          await setDoc(doc(db, 'patients', patientId), patientDoc, { merge: true });
-
-          // Send real-time notification to admin device
-          const notifsRef = collection(db, 'notifications');
-          addDoc(notifsRef, {
-            userId: 'admin',
-            role: 'admin',
-            title: 'New Patient Portal Login',
-            message: `A patient signed in successfully via 1-click access on ${typeof window !== 'undefined' ? window.location.hostname : 'Netlify'}.`,
-            type: 'patient_registered',
-            read: false,
-            createdAt: new Date().toISOString()
-          }).catch(() => {});
-        } catch {
-          // ignore
-        }
-
-        const profile: PatientProfile = {
-          id: patientId,
-          email: patientDoc.email,
-          fullName: patientDoc.fullName,
-          phone: '',
-          gender: 'Male',
-          city: 'Lahore',
-          isBlocked: false,
-          createdAt: patientDoc.createdAt
-        };
-
-        setPatient(profile);
-        localStorage.setItem('dad_patient_session_user', JSON.stringify(profile));
-        tagPatientDevice(profile.id, profile.email);
-        return { success: true };
+        message = 'UNAUTHORIZED_DOMAIN';
       }
       return { success: false, error: message };
     }
@@ -551,6 +544,9 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       const updated = { ...patient, ...updates };
       setPatient(updated);
+      try {
+        localStorage.setItem('dad_patient_session_user', JSON.stringify(updated));
+      } catch {}
 
       // Notify admin of profile update
       try {

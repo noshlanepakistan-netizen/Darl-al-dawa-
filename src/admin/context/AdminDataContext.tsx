@@ -1004,7 +1004,13 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         created_at: newApp.createdAt
       };
 
-      setDoc(doc(db, 'appointments', newId), firestorePayload).catch((err) => {
+      // Sanitize: strip or replace any undefined/null values so Firestore SDK never rejects the document
+      const safePayload: Record<string, any> = {};
+      Object.entries(firestorePayload).forEach(([k, v]) => {
+        safePayload[k] = v !== undefined && v !== null ? v : '';
+      });
+
+      setDoc(doc(db, 'appointments', newId), safePayload).catch((err) => {
         console.warn('Could not write appointment to Firestore:', err);
       });
 
@@ -1020,11 +1026,12 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createdAt: new Date().toISOString()
       }).catch((err) => console.warn('Could not create admin notification:', err));
 
-      // 3. Write real-time notification for Patient device if patientId is present
-      if (newApp.patientId) {
+      // 3. Write real-time notification for Patient device
+      if (newApp.patientId || cleanPhone) {
         addDoc(collection(db, 'notifications'), {
           role: 'patient',
-          userId: newApp.patientId,
+          userId: newApp.patientId || '',
+          phone: cleanPhone,
           title: 'Appointment Booked Successfully 🩺',
           message: `Your appointment request [${newApp.token}] for ${newApp.appointmentDate} (${newApp.timeSlot}) has been received.`,
           type: 'appointment',

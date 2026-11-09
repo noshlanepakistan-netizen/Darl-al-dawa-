@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { useAdminData } from '../../admin/context/AdminDataContext';
 import { useNotifications } from '../../context/NotificationContext';
@@ -65,8 +65,15 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
   });
   const [bookSlot, setBookSlot] = useState('evening');
   const [bookNotes, setBookNotes] = useState('');
+  const [bookPhone, setBookPhone] = useState(patient?.phone || '');
   const [bookSuccessToken, setBookSuccessToken] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (patient?.phone && !bookPhone) {
+      setBookPhone(patient.phone);
+    }
+  }, [patient?.phone]);
 
   if (!isOpen || !patient) return null;
 
@@ -101,16 +108,17 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
   const handleDashboardBooking = (e: React.FormEvent) => {
     e.preventDefault();
     const token = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
+    const finalPhone = (bookPhone || patient.phone || '').trim();
 
     addAppointment({
       token,
       patientId: patient.id,
-      patientName: patient.fullName,
-      phone: patient.phone,
-      departmentId: bookDeptId,
-      doctorId: bookDoctorId || undefined,
-      appointmentDate: bookDate,
-      timeSlot: bookSlot,
+      patientName: patient.fullName || 'Patient',
+      phone: finalPhone,
+      departmentId: bookDeptId || 'cardiology',
+      doctorId: bookDoctorId || '',
+      appointmentDate: bookDate || new Date().toISOString().split('T')[0],
+      timeSlot: bookSlot || 'morning',
       patientType: 'new',
       notes: bookNotes ? `(Online Portal) ${bookNotes}` : '(Online Portal)',
       status: 'pending'
@@ -443,12 +451,19 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Mobile Phone (Auto-filled)</label>
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        {isUrdu ? 'موبائل فون نمبر' : 'Mobile Phone'} {patient.phone ? '(Auto-filled)' : '*'}
+                      </label>
                       <input
                         type="tel"
-                        disabled
-                        value={patient.phone}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 cursor-not-allowed font-mono font-medium"
+                        required
+                        value={patient.phone || bookPhone}
+                        onChange={(e) => setBookPhone(e.target.value)}
+                        disabled={!!patient.phone}
+                        placeholder="0300-1234567"
+                        className={`w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-medium ${
+                          patient.phone ? 'bg-slate-100 text-slate-700 cursor-not-allowed' : 'bg-white text-slate-900 focus:border-[#1E5AA8]'
+                        }`}
                       />
                     </div>
                   </div>
