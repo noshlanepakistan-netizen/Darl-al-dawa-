@@ -4,7 +4,7 @@ import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { useNotifications } from '../context/NotificationContext';
-import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone, triggerWhatsApp } from '../utils/phoneUtils';
 
 interface HeaderTopBarProps {
   lang: 'en' | 'ur';
@@ -123,9 +123,9 @@ export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({
 
           <a
             href={whatsappHref}
-            target="_blank"
+            onClick={(e) => triggerWhatsApp(hospitalConfig?.contact?.whatsapp, "Hello Dar al Dawa Medical Center Lahore, I would like to inquire about...", e)}
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+            className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-medium transition-colors cursor-pointer"
           >
             <MessageSquare className="w-3.5 h-3.5" />
             <span className={isUrdu ? 'font-urdu' : ''}>{t.whatsapp}</span>

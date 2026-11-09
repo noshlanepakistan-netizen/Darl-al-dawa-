@@ -18,8 +18,53 @@ export const cleanWhatsAppNumber = (input?: string): string => {
 
 export const formatWhatsAppLink = (input?: string, message?: string): string => {
   const number = cleanWhatsAppNumber(input);
-  const textParam = message ? `?text=${encodeURIComponent(message)}` : '';
-  return `https://wa.me/${number}${textParam}`;
+  const textParam = message ? `&text=${encodeURIComponent(message)}` : '';
+  // api.whatsapp.com/send carries phone directly as query param so number is never lost
+  return `https://api.whatsapp.com/send?phone=${number}${textParam}`;
+};
+
+/**
+ * Universally triggers WhatsApp on the VERY FIRST click across iOS, Android, and Desktop.
+ * Prevents mobile browsers from opening a blank _blank tab that blocks the WhatsApp native intent.
+ */
+export const triggerWhatsApp = (input?: string, message?: string, event?: React.SyntheticEvent) => {
+  if (event) {
+    try {
+      event.preventDefault();
+      event.stopPropagation();
+    } catch {
+      // ignore
+    }
+  }
+
+  const number = cleanWhatsAppNumber(input);
+  const text = message || 'Hello Dar al Dawa Medical Center Lahore, I have an inquiry';
+  const encodedText = encodeURIComponent(text);
+
+  // Check if user is on mobile or tablet device
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // 1st Priority on Mobile: whatsapp://send opens native app instantly on 1st click
+    const nativeScheme = `whatsapp://send?phone=${number}&text=${encodedText}`;
+    const webFallback = `https://api.whatsapp.com/send?phone=${number}&text=${encodedText}`;
+
+    // Directly trigger native app handoff
+    window.location.href = nativeScheme;
+
+    // Safety fallback: if native app isn't installed, redirect to web endpoint after 1.2s
+    setTimeout(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        window.location.href = webFallback;
+      }
+    }, 1200);
+  } else {
+    // Desktop: Open api.whatsapp.com directly in a new tab
+    const desktopUrl = `https://api.whatsapp.com/send?phone=${number}&text=${encodedText}`;
+    window.open(desktopUrl, '_blank', 'noopener,noreferrer');
+  }
 };
 
 export const formatTelLink = (input?: string): string => {

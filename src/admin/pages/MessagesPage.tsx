@@ -14,6 +14,7 @@ import {
   Send
 } from 'lucide-react';
 import { ContactMessage } from '../types';
+import { formatWhatsAppLink } from '../../utils/phoneUtils';
 
 interface MessagesPageProps {
   lang: 'en' | 'ur';
@@ -45,8 +46,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ lang }) => {
   const getWhatsAppReplyLink = (msg: ContactMessage) => {
     if (!msg.phone) return '#';
     const text = `Hello ${msg.name}, thank you for contacting Dar al Dawa Medical Center Lahore regarding "${msg.subject}". In response to your inquiry: `;
-    const cleanPhone = msg.phone.replace(/[\s-]/g, '').replace(/^0/, '92');
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    return formatWhatsAppLink(msg.phone, text);
   };
 
   return (

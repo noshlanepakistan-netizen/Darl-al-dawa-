@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CalendarCheck, PhoneCall, ShieldCheck, Clock, Users, Award, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
-import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone, triggerWhatsApp } from '../utils/phoneUtils';
 
 
 interface HeroProps {
@@ -331,9 +331,9 @@ export const Hero: React.FC<HeroProps> = ({
                   </span>
                   <a
                     href={formatWhatsAppLink(hospitalConfig.contact.whatsapp, 'Hello, I want to inquire about OPD appointment')}
-                    target="_blank"
+                    onClick={(e) => triggerWhatsApp(hospitalConfig.contact.whatsapp, 'Hello, I want to inquire about OPD appointment', e)}
                     rel="noopener noreferrer"
-                    className="text-[#2E9E5B] hover:underline font-medium"
+                    className="text-[#2E9E5B] hover:underline font-medium cursor-pointer"
                   >
                     {isUrdu ? 'واٹس ایپ پر رابطہ' : 'Chat via WhatsApp'}
                   </a>

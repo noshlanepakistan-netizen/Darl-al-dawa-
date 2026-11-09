@@ -15,7 +15,7 @@ import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { useNotifications } from '../context/NotificationContext';
-import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone, triggerWhatsApp } from '../utils/phoneUtils';
 
 // Official WhatsApp Vector Icon (used in drawer menu & dropdown)
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
@@ -239,9 +239,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 <a
                   href={whatsappHref}
-                  target="_blank"
+                  onClick={(e) => {
+                    setMoreDropdownOpen(false);
+                    triggerWhatsApp(hospitalConfig?.contact?.whatsapp, isUrdu ? 'اسلام علیکم، مجھے رہنمائی چاہیے' : 'Hello Dar al Dawa Medical Center, I would like to inquire about...', e);
+                  }}
                   rel="noopener noreferrer"
-                  onClick={() => setMoreDropdownOpen(false)}
                   className="w-full text-left rtl:text-right px-4 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <WhatsAppIcon className="w-4 h-4 fill-[#25D366] shrink-0" />
@@ -460,9 +462,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* WhatsApp Contact in Mobile Menu (Retained for easy patient contact) */}
             <a
               href={whatsappHref}
-              target="_blank"
+              onClick={(e) => {
+                setMobileMenuOpen(false);
+                triggerWhatsApp(hospitalConfig?.contact?.whatsapp, isUrdu ? 'اسلام علیکم، مجھے فوری رہنمائی چاہیے' : 'Hello Dar al Dawa Medical Center, I need quick assistance', e);
+              }}
               rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm shadow-xs transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm shadow-xs transition-colors cursor-pointer"
             >
               <WhatsAppIcon className="w-5 h-5 fill-white" />
               <span>{isUrdu ? 'واٹس ایپ پر فوری رابطہ کریں' : 'Chat on WhatsApp'}</span>

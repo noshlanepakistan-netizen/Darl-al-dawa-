@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PhoneCall, ArrowUp } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
-import { formatWhatsAppLink, formatTelLink, formatDisplayPhone } from '../utils/phoneUtils';
+import { formatWhatsAppLink, formatTelLink, formatDisplayPhone, triggerWhatsApp } from '../utils/phoneUtils';
 
 
 // Official WhatsApp Vector Icon
@@ -87,9 +87,9 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({ lang }) => {
       {/* WhatsApp Chat Floating Button (Always prominent and clearly visible on mobile) */}
       <a
         href={whatsappHref}
-        target="_blank"
+        onClick={(e) => triggerWhatsApp(hospitalConfig?.contact?.whatsapp, "Hello Dar al Dawa Medical Center Lahore, I have an inquiry", e)}
         rel="noopener noreferrer"
-        className="pointer-events-auto group relative flex items-center gap-1.5 min-[360px]:gap-2 px-3 py-2.5 min-[360px]:px-3.5 min-[360px]:py-2.5 sm:px-4 sm:py-3 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-2xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/30"
+        className="pointer-events-auto group relative flex items-center gap-1.5 min-[360px]:gap-2 px-3 py-2.5 min-[360px]:px-3.5 min-[360px]:py-2.5 sm:px-4 sm:py-3 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-2xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/30 cursor-pointer"
         title={isUrdu ? 'واٹس ایپ پر رابطہ کریں' : 'Chat on WhatsApp'}
       >
 

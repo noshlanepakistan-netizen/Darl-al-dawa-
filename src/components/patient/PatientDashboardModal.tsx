@@ -24,7 +24,7 @@ import {
   Save,
   MessageSquare
 } from 'lucide-react';
-import { formatWhatsAppLink } from '../../utils/phoneUtils';
+import { formatWhatsAppLink, triggerWhatsApp } from '../../utils/phoneUtils';
 
 interface PatientDashboardModalProps {
   isOpen: boolean;
@@ -368,9 +368,15 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
                               hospitalConfig.contact.whatsapp,
                               `Hello Dar al Dawa, I am inquiring about my appointment token ${appt.token} scheduled on ${appt.appointmentDate}.`
                             )}
-                            target="_blank"
+                            onClick={(e) =>
+                              triggerWhatsApp(
+                                hospitalConfig.contact.whatsapp,
+                                `Hello Dar al Dawa, I am inquiring about my appointment token ${appt.token} scheduled on ${appt.appointmentDate}.`,
+                                e
+                              )
+                            }
                             rel="noopener noreferrer"
-                            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#2E9E5B] border border-emerald-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+                            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#2E9E5B] border border-emerald-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                             <span>WhatsApp Inquire</span>

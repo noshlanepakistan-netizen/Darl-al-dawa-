@@ -21,6 +21,7 @@ import {
 import { DEPARTMENTS, DOCTORS, HOSPITAL_CONFIG } from '../../data/hospitalData';
 import { AdminAppointment, AppointmentStatus } from '../types';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { formatWhatsAppLink } from '../../utils/phoneUtils';
 
 interface AppointmentsPageProps {
   lang: 'en' | 'ur';
@@ -110,8 +111,7 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
       `• Location: 42-A Main Boulevard, Gulberg III, Lahore.\n` +
       `Helpline: 042-111-327-227. Please arrive 15 minutes prior.`;
 
-    const cleanPhone = app.phone.replace(/[\s-]/g, '').replace(/^0/, '92');
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    return formatWhatsAppLink(app.phone, text);
   };
 
   const copySMSTemplate = (app: AdminAppointment) => {

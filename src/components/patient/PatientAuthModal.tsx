@@ -13,7 +13,10 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 
 interface PatientAuthModalProps {
@@ -55,6 +58,7 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
 
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -291,10 +295,61 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
         {/* Form Body */}
         <div className="p-6">
           {error && (
-            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
-              <span>{error}</span>
-            </div>
+            error.startsWith('UNAUTHORIZED_DOMAIN:') || error.includes('unauthorized-domain') ? (
+              <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-slate-800 text-xs space-y-2.5">
+                <div className="flex items-start gap-2 text-amber-900">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                  <div>
+                    <span className="font-bold block text-[13px]">
+                      {isUrdu ? 'نیٹلی فائی پر گوگل لاگ ان کی منظوری درکار ہے' : 'Google Auth: Domain Authorization Required'}
+                    </span>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                      {isUrdu
+                        ? `گوگل کے حفاظتی اصول کے مطابق اس نیٹلی فائی ڈومین (${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}) کو فائر بیس کی "Authorized domains" لسٹ میں شامل کرنا ضروری ہے۔`
+                        : `Google security requires '${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}' to be added to Firebase Authorized Domains.`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const domain = error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'daraldawa.netlify.app');
+                      navigator.clipboard.writeText(domain);
+                      setCopiedDomain(true);
+                      setTimeout(() => setCopiedDomain(false), 2500);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-semibold text-slate-700 hover:bg-amber-100 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                    <span>{copiedDomain ? (isUrdu ? 'کاپی ہو گیا ✓' : 'Copied ✓') : (isUrdu ? `کاپی ڈومین نام` : `Copy Domain`)}</span>
+                  </button>
+
+                  <a
+                    href="https://console.firebase.google.com/project/gen-lang-client-0019179268/authentication/settings"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 font-semibold text-white flex items-center gap-1.5 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>{isUrdu ? 'فائر بیس اتھورائزڈ سیٹنگز کھولیں' : 'Open Firebase Console Settings'}</span>
+                  </a>
+                </div>
+
+                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px]">
+                  <span className="font-bold">{isUrdu ? '💡 فوری حل:' : '💡 Instant Access:'}</span>{' '}
+                  {isUrdu
+                    ? 'آپ نیچے دیے گئے فارم میں ای میل اور پاس ورڈ سے براہِ راست فوری سائن ان یا نیا اکاؤنٹ رجسٹر کر سکتے ہیں، یہ 100% فعال ہے!'
+                    : 'You can sign in or register with Email & Password below right now, it works 100% without domain restrictions!'}
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>{error}</span>
+              </div>
+            )
           )}
 
           {success && (

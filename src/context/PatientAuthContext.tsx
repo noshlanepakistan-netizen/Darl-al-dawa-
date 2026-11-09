@@ -111,6 +111,16 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
             read: false,
             createdAt: new Date().toISOString()
           });
+
+          await addDoc(notifsRef, {
+            userId: 'admin',
+            role: 'admin',
+            title: 'New Patient Registration (Google)',
+            message: `${cleanName} (${userEmail || 'Google User'}) registered a new patient account via Google Login.`,
+            type: 'patient_registered',
+            read: false,
+            createdAt: new Date().toISOString()
+          });
         } catch {
           // ignore
         }
@@ -379,6 +389,9 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         message = 'Only one sign-in window at a time is allowed.';
       } else if (err.code === 'auth/popup-blocked') {
         message = 'Popup was blocked by your browser. Please allow popups for this site.';
+      } else if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'Netlify';
+        message = `UNAUTHORIZED_DOMAIN:${host}`;
       }
       return { success: false, error: message };
     }

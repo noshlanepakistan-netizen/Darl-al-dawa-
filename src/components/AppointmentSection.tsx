@@ -17,7 +17,7 @@ import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { tagGuestDevice } from '../utils/oneSignal';
-import { formatWhatsAppLink } from '../utils/phoneUtils';
+import { formatWhatsAppLink, triggerWhatsApp } from '../utils/phoneUtils';
 
 interface AppointmentSectionProps {
   lang: 'en' | 'ur';
@@ -147,13 +147,13 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   const selectedDeptObj = deptsList.find((d) => d.id === departmentId);
   const selectedDocObj = docsList.find((d) => d.id === doctorId);
 
-  const generateWhatsAppUrl = () => {
+  const generateWhatsAppMessage = () => {
     const deptTitle = isUrdu ? selectedDeptObj?.titleUrdu : selectedDeptObj?.title;
     const docName = selectedDocObj
       ? (isUrdu ? selectedDocObj.nameUrdu : selectedDocObj.name)
       : (isUrdu ? 'پہلا دستیاب ڈاکٹر' : 'First Available Specialist');
 
-    const msg = isUrdu
+    return isUrdu
       ? `السلام علیکم! دار الدواء میڈیکل سنٹر لاہور میں آن لائن اپوائنٹمنٹ کی تصدیق:\n` +
         `ٹوکن: ${appointmentToken || 'نیا'}\n` +
         `مریض: ${patientName}\n` +
@@ -176,8 +176,10 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
         `*Time Slot:* ${timeSlot.toUpperCase()}\n` +
         `*Type:* ${patientType === 'new' ? 'New Patient' : 'Follow-up'}\n` +
         (notes ? `*Notes:* ${notes}` : '');
+  };
 
-    return formatWhatsAppLink(hospitalConfig.contact.whatsapp, msg);
+  const generateWhatsAppUrl = () => {
+    return formatWhatsAppLink(hospitalConfig.contact.whatsapp, generateWhatsAppMessage());
   };
 
 
@@ -264,9 +266,9 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
                 </p>
                 <a
                   href={generateWhatsAppUrl()}
-                  target="_blank"
+                  onClick={(e) => triggerWhatsApp(hospitalConfig.contact.whatsapp, generateWhatsAppMessage(), e)}
                   rel="noopener noreferrer"
-                  className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-sm shadow-md transition-all active:scale-95"
+                  className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-sm shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   <MessageSquare className="w-4 h-4" />
                   <span className={isUrdu ? 'font-urdu text-base font-normal' : ''}>
@@ -529,9 +531,9 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
 
                 <a
                   href={formatWhatsAppLink(hospitalConfig.contact.whatsapp, 'Hello Dar al Dawa Hospital, I would like to book an OPD appointment')}
-                  target="_blank"
+                  onClick={(e) => triggerWhatsApp(hospitalConfig.contact.whatsapp, 'Hello Dar al Dawa Hospital, I would like to book an OPD appointment', e)}
                   rel="noopener noreferrer"
-                  className="w-full sm:w-auto py-3.5 px-5 rounded-xl border border-emerald-600/40 bg-emerald-50 hover:bg-emerald-100 text-[#2E9E5B] font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
+                  className="w-full sm:w-auto py-3.5 px-5 rounded-xl border border-emerald-600/40 bg-emerald-50 hover:bg-emerald-100 text-[#2E9E5B] font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
 
                   <MessageSquare className="w-4 h-4" />

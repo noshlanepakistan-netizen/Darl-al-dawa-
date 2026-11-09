@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { LabReportRecord } from '../types';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { formatWhatsAppLink } from '../../utils/phoneUtils';
 
 interface LabReportsPageProps {
   lang: 'en' | 'ur';
@@ -92,8 +93,7 @@ export const LabReportsPage: React.FC<LabReportsPageProps> = ({ lang }) => {
       `You can download your verified PDF report directly from our portal using your Report ID (${rep.reportId}) and Mobile Number (${rep.patientPhone}).\n` +
       `Helpline: 042-111-327-227.`;
 
-    const cleanPhone = rep.patientPhone.replace(/[\s-]/g, '').replace(/^0/, '92');
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    return formatWhatsAppLink(rep.patientPhone, text);
   };
 
   return (
