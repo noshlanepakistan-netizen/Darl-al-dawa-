@@ -128,6 +128,7 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
     // Save to master Admin & Firestore database
     addAppointment({
       token: randomToken,
+      patientId: patient?.id || '',
       patientName: patientName.trim(),
       phone: phone.trim(),
       cnic: cnic.trim(),

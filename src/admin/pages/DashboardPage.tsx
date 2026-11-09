@@ -357,8 +357,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, lang }
                 {appointments.slice(0, 4).map((app) => (
                   <tr key={app.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-2.5">
-                      <div className="font-bold text-slate-900">{app.patientName}</div>
-                      <div className="font-mono text-[10px] text-slate-500">{app.token} • {app.phone}</div>
+                      <div className="font-bold text-slate-900">{app.patientName || 'Patient'}</div>
+                      <div className="font-mono text-[10px] text-slate-500">{app.token || app.id} • {app.phone || 'No phone'}</div>
                     </td>
                     <td className="py-2.5 text-slate-600">
                       <div>{app.appointmentDate}</div>

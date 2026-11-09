@@ -104,6 +104,7 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
 
     addAppointment({
       token,
+      patientId: patient.id,
       patientName: patient.fullName,
       phone: patient.phone,
       departmentId: bookDeptId,

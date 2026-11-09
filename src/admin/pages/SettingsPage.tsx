@@ -598,9 +598,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
     if (appDateFilter && app.appointmentDate !== appDateFilter) return false;
     if (appSearch) {
       const q = appSearch.toLowerCase();
-      const matchName = app.patientName.toLowerCase().includes(q);
-      const matchPhone = app.phone.includes(q);
-      const matchToken = app.token.toLowerCase().includes(q);
+      const matchName = (app.patientName || '').toLowerCase().includes(q);
+      const matchPhone = (app.phone || '').includes(q);
+      const matchToken = (app.token || '').toLowerCase().includes(q);
       if (!matchName && !matchPhone && !matchToken) return false;
     }
     return true;
@@ -1877,8 +1877,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ lang }) => {
                             {app.token}
                           </td>
                           <td className="p-3">
-                            <div className="font-semibold text-slate-900">{app.patientName}</div>
-                            <div className="text-[11px] text-slate-500">{app.phone}</div>
+                            <div className="font-semibold text-slate-900">{app.patientName || 'Patient'}</div>
+                            <div className="text-[11px] text-slate-500">{app.phone || 'N/A'}</div>
                           </td>
                           <td className="p-3">
                             <div className="font-medium text-slate-800">{dept?.title || app.departmentId}</div>

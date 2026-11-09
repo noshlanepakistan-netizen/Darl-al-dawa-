@@ -21,7 +21,7 @@ import {
 import { DEPARTMENTS, DOCTORS, HOSPITAL_CONFIG } from '../../data/hospitalData';
 import { AdminAppointment, AppointmentStatus } from '../types';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
-import { formatWhatsAppLink } from '../../utils/phoneUtils';
+import { formatWhatsAppLink, triggerWhatsApp } from '../../utils/phoneUtils';
 
 interface AppointmentsPageProps {
   lang: 'en' | 'ur';
@@ -53,12 +53,18 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
 
   // Filter logic
   const filteredAppointments = appointments.filter((app) => {
-    const q = searchQuery.toLowerCase();
+    const q = (searchQuery || '').toLowerCase().trim();
+    const pName = (app.patientName || '').toLowerCase();
+    const pPhone = (app.phone || '');
+    const pToken = (app.token || '').toLowerCase();
+    const pCnic = (app.cnic || '');
+
     const matchSearch =
-      app.patientName.toLowerCase().includes(q) ||
-      app.phone.includes(q) ||
-      app.token.toLowerCase().includes(q) ||
-      (app.cnic && app.cnic.includes(q));
+      !q ||
+      pName.includes(q) ||
+      pPhone.includes(q) ||
+      pToken.includes(q) ||
+      pCnic.includes(q);
 
     const matchStatus = statusFilter === 'all' || app.status === statusFilter;
     const matchDept = deptFilter === 'all' || app.departmentId === deptFilter;
@@ -296,15 +302,15 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
                     <tr key={app.id} className="hover:bg-slate-50/80 transition-colors">
                       {/* Token & Patient Name */}
                       <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900 text-sm">{app.patientName}</div>
+                        <div className="font-bold text-slate-900 text-sm">{app.patientName || 'Patient'}</div>
                         <div className="inline-block px-2 py-0.5 rounded bg-blue-50 text-[#1E5AA8] font-mono font-bold text-[11px] border border-blue-200 mt-0.5">
-                          {app.token}
+                          {app.token || app.id}
                         </div>
                       </td>
 
                       {/* Contact & CNIC */}
                       <td className="py-3 px-4 font-mono">
-                        <div className="text-slate-800 font-semibold">{app.phone}</div>
+                        <div className="text-slate-800 font-semibold">{app.phone || 'No phone'}</div>
                         <div className="text-[11px] text-slate-400">{app.cnic || 'CNIC: Not provided'}</div>
                       </td>
 
@@ -352,9 +358,24 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
                         <div className="inline-flex items-center gap-1.5">
                           <a
                             href={getWhatsAppLink(app)}
+                            onClick={(e) => {
+                              const dept = DEPARTMENTS.find((d) => d.id === app.departmentId)?.title || app.departmentId;
+                              const doc = DOCTORS.find((d) => d.id === app.doctorId)?.name || 'Consultant Specialist';
+                              const text =
+                                `*Dar al Dawa Medical Center - Appointment Confirmation*\n` +
+                                `Dear ${app.patientName || 'Patient'},\n` +
+                                `Your appointment has been CONFIRMED.\n` +
+                                `• Token: *${app.token}*\n` +
+                                `• Department: ${dept}\n` +
+                                `• Doctor: ${doc}\n` +
+                                `• Date: ${app.appointmentDate} (${app.timeSlot.toUpperCase()})\n` +
+                                `• Location: 42-A Main Boulevard, Gulberg III, Lahore.\n` +
+                                `Helpline: 042-111-327-227. Please arrive 15 minutes prior.`;
+                              triggerWhatsApp(app.phone, text, e);
+                            }}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-[#2E9E5B] text-[#2E9E5B] hover:text-white transition-colors"
+                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-[#2E9E5B] text-[#2E9E5B] hover:text-white transition-colors cursor-pointer"
                             title="Send WhatsApp confirmation"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />

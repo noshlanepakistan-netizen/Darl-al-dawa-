@@ -23,6 +23,7 @@ import {
 import { PatientProfile, PatientAppointment } from '../types/patient';
 import { auth, db, isFirebaseConfigured } from '../firebase/config';
 import { tagPatientDevice, logoutOneSignal } from '../utils/oneSignal';
+import { cleanWhatsAppNumber } from '../utils/phoneUtils';
 
 interface PatientAuthContextType {
   patient: PatientProfile | null;
@@ -186,42 +187,63 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Real-time listener for patient's appointments from Firestore
   useEffect(() => {
-    if (!patient?.id && !patient?.phone) {
+    if (!patient?.id && !patient?.phone && !patient?.email) {
       setMyAppointments([]);
       return;
     }
 
     try {
       const apptsRef = collection(db, 'appointments');
-      // Set up real-time listener filtering by patientId or phone
-      let q = query(apptsRef, orderBy('createdAt', 'desc'));
-      if (patient.id) {
-        q = query(apptsRef, where('patientId', '==', patient.id));
-      }
-
       const unsubscribe = onSnapshot(
-        q,
+        apptsRef,
         (snapshot) => {
           const list: PatientAppointment[] = [];
+          const currentPatientId = (patient.id || '').trim();
+          const patientPhoneClean = patient.phone ? cleanWhatsAppNumber(patient.phone) : '';
+          const patientEmail = (patient.email || '').trim().toLowerCase();
+          const patientName = (patient.fullName || '').trim().toLowerCase();
+
           snapshot.forEach((docSnap) => {
             const a = docSnap.data();
-            list.push({
-              id: docSnap.id,
-              token: a.token || a.id || docSnap.id.substring(0, 6).toUpperCase(),
-              patientId: a.patientId || a.patient_id,
-              patientName: a.patientName || a.patient_name || a.name || '',
-              phone: a.phone || '',
-              cnic: a.cnic,
-              departmentId: a.departmentId || a.department_id || '',
-              doctorId: a.doctorId || a.doctor_id || '',
-              appointmentDate: a.appointmentDate || a.appointment_date || a.date || '',
-              timeSlot: a.timeSlot || a.time_slot || a.time || '',
-              patientType: a.patientType || a.patient_type || 'new',
-              notes: a.notes,
-              status: (a.status as any) || 'pending',
-              createdAt: a.createdAt || a.created_at || new Date().toISOString()
-            });
+            const appPatientId = (a.patientId || a.patient_id || '').toString().trim();
+            const appPhone = (a.phone || a.mobile || a.phoneNumber || a.phone_number || '').toString().trim();
+            const appPhoneClean = appPhone ? cleanWhatsAppNumber(appPhone) : '';
+            const appEmail = (a.email || '').toString().trim().toLowerCase();
+            const appPatientName = (a.patientName || a.patient_name || a.name || a.fullName || '').toString().trim().toLowerCase();
+
+            // Match if:
+            // 1. Patient ID matches
+            // 2. Cleaned phone number matches
+            // 3. Email matches
+            // 4. Exact full name matches if user is authenticated
+            const isMatch =
+              (currentPatientId && appPatientId === currentPatientId) ||
+              (patientPhoneClean && appPhoneClean && patientPhoneClean === appPhoneClean) ||
+              (patientEmail && appEmail && patientEmail === appEmail) ||
+              (patientName && appPatientName && patientName === appPatientName && (!appPhoneClean || patientPhoneClean === appPhoneClean));
+
+            if (isMatch) {
+              list.push({
+                id: docSnap.id,
+                token: (a.token || `DAD-${docSnap.id.slice(-6).toUpperCase()}`).toString().trim(),
+                patientId: appPatientId || currentPatientId,
+                patientName: (a.patientName || a.patient_name || a.name || patient.fullName || 'Patient').toString().trim(),
+                phone: (appPhone || patient.phone || '').toString().trim(),
+                cnic: a.cnic,
+                departmentId: (a.departmentId || a.department_id || '').toString(),
+                doctorId: (a.doctorId || a.doctor_id || '').toString(),
+                appointmentDate: (a.appointmentDate || a.appointment_date || a.date || '').toString(),
+                timeSlot: (a.timeSlot || a.time_slot || a.time || 'morning').toString(),
+                patientType: (a.patientType || a.patient_type || 'new') as 'new' | 'followup',
+                notes: a.notes,
+                status: (a.status as any) || 'pending',
+                createdAt: (a.createdAt || a.created_at || new Date().toISOString()).toString()
+              });
+            }
           });
+
+          // Sort by creation date descending
+          list.sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime());
           setMyAppointments(list);
         },
         (error) => {
@@ -233,7 +255,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     } catch (err) {
       console.warn('Could not subscribe to patient appointments:', err);
     }
-  }, [patient?.id, patient?.phone]);
+  }, [patient?.id, patient?.phone, patient?.email, patient?.fullName]);
 
   // Sign Up
   const signUp = async (params: {

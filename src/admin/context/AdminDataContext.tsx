@@ -45,6 +45,7 @@ import {
   setDoc,
   deleteDoc,
   updateDoc,
+  addDoc,
   onSnapshot,
   getDoc,
   getDocs,
@@ -694,21 +695,44 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const list: AdminAppointment[] = [];
           snap.forEach((a) => {
             const data = a.data();
+            const resolvedPatientName = (
+              data.patientName ||
+              data.patient_name ||
+              data.name ||
+              data.fullName ||
+              'Patient'
+            ).toString().trim();
+
+            const resolvedPhone = (
+              data.phone ||
+              data.mobile ||
+              data.phoneNumber ||
+              data.phone_number ||
+              data.contact ||
+              ''
+            ).toString().trim();
+
+            const resolvedToken = (
+              data.token ||
+              `DAD-${a.id.slice(-6).toUpperCase()}`
+            ).toString().trim();
+
             list.push({
               id: a.id,
-              token: data.token,
-              patientId: data.patientId || data.patient_id,
-              patientName: data.patientName || data.patient_name,
-              phone: data.phone,
-              cnic: data.cnic,
-              departmentId: data.departmentId || data.department_id,
-              doctorId: data.doctorId || data.doctor_id,
-              appointmentDate: data.appointmentDate || data.appointment_date,
-              timeSlot: data.timeSlot || data.time_slot,
-              patientType: data.patientType || data.patient_type || 'new',
-              notes: data.notes,
-              status: data.status as AppointmentStatus,
-              createdAt: data.createdAt || data.created_at || new Date().toISOString()
+              token: resolvedToken,
+              patientId: data.patientId || data.patient_id || '',
+              patientName: resolvedPatientName,
+              phone: resolvedPhone,
+              cnic: data.cnic || '',
+              departmentId: data.departmentId || data.department_id || 'general',
+              doctorId: data.doctorId || data.doctor_id || '',
+              appointmentDate: data.appointmentDate || data.appointment_date || data.date || '',
+              timeSlot: data.timeSlot || data.time_slot || data.time || 'morning',
+              patientType: (data.patientType || data.patient_type || 'new') as 'new' | 'followup',
+              notes: data.notes || '',
+              status: (data.status as AppointmentStatus) || 'pending',
+              createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+              updatedAt: data.updatedAt || data.updated_at
             });
           });
           list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -923,28 +947,94 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // 4. Appointments
   const addAppointment = (app: Omit<AdminAppointment, 'id' | 'createdAt'>): string => {
-    const token = `DAD-${Date.now().toString().slice(-4)}`;
-    const newId = `app-${Date.now()}`;
+    const token = app.token || `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
+    const newId = `app-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const cleanPatientName = (app.patientName || '').trim() || 'Patient';
+    const cleanPhone = (app.phone || '').trim();
+
     const newApp: AdminAppointment = {
       ...app,
       id: newId,
       token,
+      patientName: cleanPatientName,
+      phone: cleanPhone,
+      patientId: app.patientId || '',
+      status: app.status || 'pending',
       createdAt: new Date().toISOString()
     };
 
     setAppointments((prev) => {
-      const next = [newApp, ...prev];
+      const next = [newApp, ...prev.filter((a) => a.id !== newId)];
       persistSaved('appointments', next);
       return next;
     });
 
     if (isFirebaseActive) {
-      setDoc(doc(db, 'appointments', newId), newApp).catch((err) => {
+      // 1. Write the full appointment record with all field aliases for bulletproof compatibility
+      const firestorePayload = {
+        ...newApp,
+        id: newId,
+        token: newApp.token,
+        patientId: newApp.patientId || '',
+        patient_id: newApp.patientId || '',
+        patientName: newApp.patientName,
+        patient_name: newApp.patientName,
+        name: newApp.patientName,
+        fullName: newApp.patientName,
+        phone: newApp.phone,
+        patient_phone: newApp.phone,
+        mobile: newApp.phone,
+        phoneNumber: newApp.phone,
+        phone_number: newApp.phone,
+        cnic: newApp.cnic || '',
+        departmentId: newApp.departmentId || '',
+        department_id: newApp.departmentId || '',
+        doctorId: newApp.doctorId || '',
+        doctor_id: newApp.doctorId || '',
+        appointmentDate: newApp.appointmentDate || '',
+        appointment_date: newApp.appointmentDate || '',
+        date: newApp.appointmentDate || '',
+        timeSlot: newApp.timeSlot || 'morning',
+        time_slot: newApp.timeSlot || 'morning',
+        patientType: newApp.patientType || 'new',
+        patient_type: newApp.patientType || 'new',
+        notes: newApp.notes || '',
+        status: newApp.status || 'pending',
+        createdAt: newApp.createdAt,
+        created_at: newApp.createdAt
+      };
+
+      setDoc(doc(db, 'appointments', newId), firestorePayload).catch((err) => {
         console.warn('Could not write appointment to Firestore:', err);
       });
+
+      // 2. Write real-time notification for Admin device alert!
+      addDoc(collection(db, 'notifications'), {
+        role: 'admin',
+        userId: 'admin',
+        title: 'New Appointment Booked 🩺',
+        message: `${cleanPatientName} (${cleanPhone}) booked an appointment [${newApp.token}] for ${newApp.appointmentDate || 'upcoming'} (${newApp.timeSlot || 'OPD'}).`,
+        type: 'appointment',
+        link: '/admin',
+        read: false,
+        createdAt: new Date().toISOString()
+      }).catch((err) => console.warn('Could not create admin notification:', err));
+
+      // 3. Write real-time notification for Patient device if patientId is present
+      if (newApp.patientId) {
+        addDoc(collection(db, 'notifications'), {
+          role: 'patient',
+          userId: newApp.patientId,
+          title: 'Appointment Booked Successfully 🩺',
+          message: `Your appointment request [${newApp.token}] for ${newApp.appointmentDate} (${newApp.timeSlot}) has been received.`,
+          type: 'appointment',
+          read: false,
+          createdAt: new Date().toISOString()
+        }).catch((err) => console.warn('Could not create patient notification:', err));
+      }
     }
 
-    logAction('New Appointment Request', 'Appointments', `Booked for ${app.patientName} (${token}).`);
+    logAction('New Appointment Request', 'Appointments', `Booked for ${cleanPatientName} (${token}).`);
     return token;
   };
 
