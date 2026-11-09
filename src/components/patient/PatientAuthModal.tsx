@@ -13,10 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  ShieldCheck,
-  Copy,
-  Check,
-  ExternalLink
+  ShieldCheck
 } from 'lucide-react';
 
 interface PatientAuthModalProps {
@@ -58,7 +55,6 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
 
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
-  const [copiedDomain, setCopiedDomain] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -295,83 +291,10 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
         {/* Form Body */}
         <div className="p-6">
           {error && (
-            error.startsWith('UNAUTHORIZED_DOMAIN:') || error.includes('unauthorized-domain') ? (
-              <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-slate-800 text-xs space-y-2.5 relative">
-                <button
-                  type="button"
-                  onClick={() => setError(null)}
-                  className="absolute top-2.5 right-2.5 rtl:right-auto rtl:left-2.5 text-amber-600 hover:text-amber-800 p-1 rounded-md cursor-pointer"
-                  title={isUrdu ? 'بند کریں' : 'Dismiss'}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-
-                <div className="flex items-start gap-2 text-amber-900 pr-6 rtl:pr-0 rtl:pl-6">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
-                  <div>
-                    <span className="font-bold block text-[13px]">
-                      {isUrdu ? 'ڈیٹا بیس آن لائن ہے — گوگل لاگ ان کے لیے ڈومین سیٹنگ درکار ہے' : 'Database is Online — Domain Authorization for Google'}
-                    </span>
-                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                      {isUrdu
-                        ? `ہسپتال کا ڈیٹا بیس 100% فعال ہے۔ گوگل سیکیورٹی کے تحت اس نیٹلی فائی ڈومین (${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}) کو فائر بیس کی Authorized domains لسٹ میں شامل کرنا ہوتا ہے۔`
-                        : `Hospital database is 100% online. Google security requires '${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}' to be added to Firebase Authorized Domains.`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setError(null);
-                      const input = document.getElementById('patient-login-identifier');
-                      if (input) input.focus();
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                  >
-                    <span>{isUrdu ? 'موبائل نمبر / ای میل سے لاگ ان کریں' : 'Log in with Mobile / Email'}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const domain = error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'daraldawa.netlify.app');
-                      navigator.clipboard.writeText(domain);
-                      setCopiedDomain(true);
-                      setTimeout(() => setCopiedDomain(false), 2500);
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-semibold text-slate-700 hover:bg-amber-100 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-                    <span>{copiedDomain ? (isUrdu ? 'کاپی ہو گیا ✓' : 'Copied ✓') : (isUrdu ? 'کاپی ڈومین' : 'Copy Domain')}</span>
-                  </button>
-
-                  <a
-                    href="https://console.firebase.google.com/project/gen-lang-client-0019179268/authentication/settings"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-semibold text-amber-800 hover:bg-amber-100 flex items-center gap-1.5 transition-colors"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>{isUrdu ? 'فائر بیس کونسول' : 'Firebase Console'}</span>
-                  </a>
-                </div>
-
-                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px]">
-                  <span className="font-bold">{isUrdu ? '💡 آسان طریقہ:' : '💡 Easy Method:'}</span>{' '}
-                  {isUrdu
-                    ? 'کسی سیٹنگ کی ضرورت نہیں! نیچے خانے میں صرف اپنا موبائل نمبر اور پاس ورڈ درج کر کے براہِ راست لاگ ان یا نیا اکاؤنٹ رجسٹر کریں، یہ فوراً کام کرتا ہے!'
-                    : 'No configuration needed! Simply enter your Mobile Number and Password below to sign in or register instantly.'}
-                </div>
-              </div>
-            ) : (
-              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
-                <span>{error}</span>
-              </div>
-            )
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+              <span>{error}</span>
+            </div>
           )}
 
           {success && (
