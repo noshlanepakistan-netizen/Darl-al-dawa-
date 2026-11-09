@@ -31,13 +31,13 @@ interface PatientAuthContextType {
   signUp: (params: {
     fullName: string;
     phone: string;
-    email: string;
+    email?: string;
     password: string;
     gender: 'Male' | 'Female' | 'Other';
     dateOfBirth?: string;
     city: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  login: (identifier: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
@@ -225,7 +225,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const signUp = async (params: {
     fullName: string;
     phone: string;
-    email: string;
+    email?: string;
     password: string;
     gender: 'Male' | 'Female' | 'Other';
     dateOfBirth?: string;
@@ -235,7 +235,14 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return { success: false, error: 'Database is not connected.' };
     }
 
-    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanPhone = params.phone.replace(/\D/g, '');
+    let cleanEmail = (params.email || '').trim().toLowerCase();
+
+    // If no email was provided or invalid, map to virtual patient email using phone number
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      cleanEmail = `${cleanPhone || 'patient' + Date.now()}@daraldawa.patient`;
+    }
+
     if (cleanEmail === 'admin@daraldawa.com') {
       return { success: false, error: 'This email is reserved for hospital administration.' };
     }
@@ -314,18 +321,30 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   // Login
-  const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
-    const cleanEmail = email.trim().toLowerCase();
+  const login = async (identifier: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+    let clean = identifier.trim().toLowerCase();
 
-    if (cleanEmail === 'admin@daraldawa.com') {
+    if (clean === 'admin@daraldawa.com') {
       return {
         success: false,
         error: 'Administrator accounts must sign in via the Staff Admin Portal.'
       };
     }
 
+    // Convert phone number to virtual email if no '@' present
+    if (!clean.includes('@')) {
+      const digits = clean.replace(/\D/g, '');
+      if (digits.length < 9) {
+        return {
+          success: false,
+          error: 'Please enter a valid mobile number or email address.'
+        };
+      }
+      clean = `${digits}@daraldawa.patient`;
+    }
+
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+      const userCredential = await signInWithEmailAndPassword(auth, clean, pass);
       const user = userCredential.user;
 
       const res = await fetchPatientProfile(user.uid, user.email || undefined);
@@ -340,7 +359,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     } catch (err: any) {
       let message = err.message || 'Login failed';
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        message = 'Invalid email or password.';
+        message = 'Invalid mobile number/email or password.';
       }
       return { success: false, error: message };
     }

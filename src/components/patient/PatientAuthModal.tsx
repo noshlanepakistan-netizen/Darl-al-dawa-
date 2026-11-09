@@ -296,22 +296,44 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
         <div className="p-6">
           {error && (
             error.startsWith('UNAUTHORIZED_DOMAIN:') || error.includes('unauthorized-domain') ? (
-              <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-slate-800 text-xs space-y-2.5">
-                <div className="flex items-start gap-2 text-amber-900">
+              <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-slate-800 text-xs space-y-2.5 relative">
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="absolute top-2.5 right-2.5 rtl:right-auto rtl:left-2.5 text-amber-600 hover:text-amber-800 p-1 rounded-md cursor-pointer"
+                  title={isUrdu ? 'بند کریں' : 'Dismiss'}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                <div className="flex items-start gap-2 text-amber-900 pr-6 rtl:pr-0 rtl:pl-6">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
                   <div>
                     <span className="font-bold block text-[13px]">
-                      {isUrdu ? 'نیٹلی فائی پر گوگل لاگ ان کی منظوری درکار ہے' : 'Google Auth: Domain Authorization Required'}
+                      {isUrdu ? 'ڈیٹا بیس آن لائن ہے — گوگل لاگ ان کے لیے ڈومین سیٹنگ درکار ہے' : 'Database is Online — Domain Authorization for Google'}
                     </span>
                     <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
                       {isUrdu
-                        ? `گوگل کے حفاظتی اصول کے مطابق اس نیٹلی فائی ڈومین (${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}) کو فائر بیس کی "Authorized domains" لسٹ میں شامل کرنا ضروری ہے۔`
-                        : `Google security requires '${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}' to be added to Firebase Authorized Domains.`}
+                        ? `ہسپتال کا ڈیٹا بیس 100% فعال ہے۔ گوگل سیکیورٹی کے تحت اس نیٹلی فائی ڈومین (${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}) کو فائر بیس کی Authorized domains لسٹ میں شامل کرنا ہوتا ہے۔`
+                        : `Hospital database is 100% online. Google security requires '${error.split(':')[1] || (typeof window !== 'undefined' ? window.location.hostname : 'Netlify')}' to be added to Firebase Authorized Domains.`}
                     </p>
                   </div>
                 </div>
 
                 <div className="pt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      const input = document.getElementById('patient-login-identifier');
+                      if (input) input.focus();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 font-bold text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                  >
+                    <span>{isUrdu ? 'موبائل نمبر / ای میل سے لاگ ان کریں' : 'Log in with Mobile / Email'}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -323,25 +345,25 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
                     className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-semibold text-slate-700 hover:bg-amber-100 flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-                    <span>{copiedDomain ? (isUrdu ? 'کاپی ہو گیا ✓' : 'Copied ✓') : (isUrdu ? `کاپی ڈومین نام` : `Copy Domain`)}</span>
+                    <span>{copiedDomain ? (isUrdu ? 'کاپی ہو گیا ✓' : 'Copied ✓') : (isUrdu ? 'کاپی ڈومین' : 'Copy Domain')}</span>
                   </button>
 
                   <a
                     href="https://console.firebase.google.com/project/gen-lang-client-0019179268/authentication/settings"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 font-semibold text-white flex items-center gap-1.5 transition-colors"
+                    className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-semibold text-amber-800 hover:bg-amber-100 flex items-center gap-1.5 transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>{isUrdu ? 'فائر بیس اتھورائزڈ سیٹنگز کھولیں' : 'Open Firebase Console Settings'}</span>
+                    <span>{isUrdu ? 'فائر بیس کونسول' : 'Firebase Console'}</span>
                   </a>
                 </div>
 
                 <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px]">
-                  <span className="font-bold">{isUrdu ? '💡 فوری حل:' : '💡 Instant Access:'}</span>{' '}
+                  <span className="font-bold">{isUrdu ? '💡 آسان طریقہ:' : '💡 Easy Method:'}</span>{' '}
                   {isUrdu
-                    ? 'آپ نیچے دیے گئے فارم میں ای میل اور پاس ورڈ سے براہِ راست فوری سائن ان یا نیا اکاؤنٹ رجسٹر کر سکتے ہیں، یہ 100% فعال ہے!'
-                    : 'You can sign in or register with Email & Password below right now, it works 100% without domain restrictions!'}
+                    ? 'کسی سیٹنگ کی ضرورت نہیں! نیچے خانے میں صرف اپنا موبائل نمبر اور پاس ورڈ درج کر کے براہِ راست لاگ ان یا نیا اکاؤنٹ رجسٹر کریں، یہ فوراً کام کرتا ہے!'
+                    : 'No configuration needed! Simply enter your Mobile Number and Password below to sign in or register instantly.'}
                 </div>
               </div>
             ) : (
@@ -363,21 +385,22 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
           {mode === 'login' && (
             <div className="space-y-4">
               {renderGoogleButton(isUrdu ? 'گوگل کے ساتھ جاری رکھیں' : 'Continue with Google')}
-              {renderOrDivider(isUrdu ? 'یا ای میل کے ذریعے' : 'or continue with email')}
+              {renderOrDivider(isUrdu ? 'یا موبائل نمبر / ای میل کے ذریعے' : 'or with mobile number / email')}
 
               <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isUrdu ? 'ای میل ایڈریس' : 'Email Address'} *
+                    {isUrdu ? 'موبائل نمبر یا ای میل ایڈریس' : 'Mobile Number or Email Address'} *
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
-                      type="email"
+                      id="patient-login-identifier"
+                      type="text"
                       required
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="patient@example.com"
+                      placeholder={isUrdu ? '03001234567 یا patient@gmail.com' : '03001234567 or patient@example.com'}
                       className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:border-[#1E5AA8] outline-none"
                     />
                   </div>
@@ -490,16 +513,15 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      {isUrdu ? 'ای میل ایڈریس' : 'Email Address'} *
+                      {isUrdu ? 'ای میل ایڈریس (اختیاری)' : 'Email Address (Optional)'}
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input
                         type="email"
-                        required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@gmail.com"
+                        placeholder={isUrdu ? 'اختیاری (مثلاً name@gmail.com)' : 'Optional (e.g. name@gmail.com)'}
                         className="w-full pl-10 pr-3 py-2 rounded-xl border border-slate-300 text-sm focus:border-[#1E5AA8] outline-none"
                       />
                     </div>
