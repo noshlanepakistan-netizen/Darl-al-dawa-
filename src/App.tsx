@@ -27,6 +27,8 @@ import { useAdminData } from './admin/context/AdminDataContext';
 import { usePatientAuth } from './context/PatientAuthContext';
 import { PatientAuthModal } from './components/patient/PatientAuthModal';
 import { PatientDashboardModal } from './components/patient/PatientDashboardModal';
+import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
+import { requestFcmToken } from './utils/fcm';
 import { AdminLayout } from './admin/components/AdminLayout';
 import { LoginPage } from './admin/pages/LoginPage';
 import { DashboardPage } from './admin/pages/DashboardPage';
@@ -110,6 +112,15 @@ export default function App() {
     document.documentElement.dir = lang === 'ur' ? 'rtl' : 'ltr';
     document.documentElement.lang = lang;
   }, [lang]);
+
+  // Auto-register admin device FCM token when authenticated as staff
+  useEffect(() => {
+    if (isAdminAuthenticated && typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        requestFcmToken({ role: 'admin', userId: 'admin' }).catch(() => {});
+      }
+    }
+  }, [isAdminAuthenticated]);
 
   const toggleLang = () => {
     setLang((prev) => (prev === 'en' ? 'ur' : 'en'));
@@ -260,8 +271,9 @@ export default function App() {
         <div className="fixed top-0 left-0 right-0 h-1 bg-[#2E9E5B] z-[99999] animate-pulse" />
       )}
 
-      {/* Notifications / Toast */}
+      {/* Notifications / Toast & Mobile Push Prompt */}
       <ToastContainer />
+      <NotificationPermissionBanner lang={lang} />
 
       {/* Online Lab Report Download Modal */}
       <ReportDownloadModal

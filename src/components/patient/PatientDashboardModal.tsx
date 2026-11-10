@@ -25,6 +25,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { formatWhatsAppLink, triggerWhatsApp } from '../../utils/phoneUtils';
+import { playNotificationChime } from '../../utils/audioChime';
 
 interface PatientDashboardModalProps {
   isOpen: boolean;
@@ -39,7 +40,7 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
   lang,
   onNavigateToBooking
 }) => {
-  const { patient, logout, myAppointments, cancelAppointment, updateProfile } = usePatientAuth();
+  const { patient, logout, myAppointments, addPatientAppointment, cancelAppointment, updateProfile } = usePatientAuth();
   const { departments, doctors, labReports, hospitalConfig, addAppointment } = useAdminData();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const isUrdu = lang === 'ur';
@@ -109,20 +110,38 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
     e.preventDefault();
     const token = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
     const finalPhone = (bookPhone || patient.phone || '').trim();
+    const finalDate = bookDate || new Date().toISOString().split('T')[0];
 
-    addAppointment({
+    const payload = {
       token,
       patientId: patient.id,
       patientName: patient.fullName || 'Patient',
       phone: finalPhone,
       departmentId: bookDeptId || 'cardiology',
       doctorId: bookDoctorId || '',
-      appointmentDate: bookDate || new Date().toISOString().split('T')[0],
+      appointmentDate: finalDate,
       timeSlot: bookSlot || 'morning',
-      patientType: 'new',
+      patientType: 'new' as const,
       notes: bookNotes ? `(Online Portal) ${bookNotes}` : '(Online Portal)',
-      status: 'pending'
-    });
+      status: 'pending' as const
+    };
+
+    addAppointment(payload);
+
+    if (addPatientAppointment) {
+      addPatientAppointment({
+        id: `app-${Date.now()}`,
+        ...payload,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    try {
+      playNotificationChime();
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([250, 100, 250]);
+      }
+    } catch {}
 
     setBookSuccessToken(token);
     setBookNotes('');
@@ -439,7 +458,7 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleDashboardBooking} className="space-y-4 text-xs bg-slate-50/70 p-5 rounded-2xl border border-slate-200">
+                <form onSubmit={handleDashboardBooking} noValidate className="space-y-4 text-xs bg-slate-50/70 p-5 rounded-2xl border border-slate-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Patient Name (Auto-filled)</label>
@@ -512,7 +531,6 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
                       <input
                         type="date"
                         required
-                        min={new Date().toISOString().split('T')[0]}
                         value={bookDate}
                         onChange={(e) => setBookDate(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm outline-none"

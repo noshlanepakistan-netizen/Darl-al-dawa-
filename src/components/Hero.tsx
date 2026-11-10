@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { CalendarCheck, PhoneCall, ShieldCheck, Clock, Users, Award, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
+import { usePatientAuth } from '../context/PatientAuthContext';
 import { formatWhatsAppLink, formatTelLink, formatDisplayPhone, triggerWhatsApp } from '../utils/phoneUtils';
-
+import { playNotificationChime } from '../utils/audioChime';
 
 interface HeroProps {
   lang: 'en' | 'ur';
@@ -18,7 +19,8 @@ export const Hero: React.FC<HeroProps> = ({
 }) => {
   const t = UI_TRANSLATIONS[lang].hero;
   const isUrdu = lang === 'ur';
-  const { homepageSettings, hospitalConfig, departments: liveDepts } = useAdminData();
+  const { homepageSettings, hospitalConfig, departments: liveDepts, addAppointment, showToast } = useAdminData();
+  const { patient, addPatientAppointment } = usePatientAuth();
   const deptsList = liveDepts || [];
 
   const heroHeading = homepageSettings?.heroHeading || (isUrdu ? 'دار الدواء میڈیکل سنٹر' : 'Caring for You, Every Step of the Way');
@@ -58,13 +60,71 @@ export const Hero: React.FC<HeroProps> = ({
     }
   }, [liveDepts]);
   const [formSubmitted, setFormSubmitted] = useState(false);
+  const [quickToken, setQuickToken] = useState('');
 
   const handleQuickSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickName.trim() || !quickPhone.trim()) return;
-    onQuickBook(quickName, quickPhone, quickDept, quickDate);
+
+    const token = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
+    setQuickToken(token);
+
+    const digits = quickPhone.replace(/\D/g, '');
+    let finalPhone = quickPhone.trim();
+    if (digits.length === 10 && digits.startsWith('3')) {
+      finalPhone = '0' + digits;
+    } else if (digits.length === 12 && digits.startsWith('923')) {
+      finalPhone = '0' + digits.slice(2);
+    }
+
+    const finalDate = quickDate || new Date().toISOString().split('T')[0];
+
+    const appointmentPayload = {
+      token,
+      patientId: patient?.id || '',
+      patientName: quickName.trim(),
+      phone: finalPhone,
+      departmentId: quickDept || 'cardiology',
+      doctorId: '',
+      appointmentDate: finalDate,
+      timeSlot: 'morning',
+      patientType: 'new' as const,
+      notes: '(Quick Hero Booking)',
+      status: 'pending' as const
+    };
+
+    // 1. Save to master Admin & Firestore database
+    addAppointment(appointmentPayload);
+
+    // 2. Save directly to Patient Appointments state
+    if (addPatientAppointment) {
+      addPatientAppointment({
+        id: `app-${Date.now()}`,
+        ...appointmentPayload,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    // 3. Audio & Haptic Feedback on User's Phone
+    try {
+      playNotificationChime();
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([250, 100, 250]);
+      }
+    } catch {}
+
+    if (showToast) {
+      showToast(
+        isUrdu
+          ? `ٹوکن ${token} کے ساتھ اپوائنٹمنٹ کامیابی سے درج ہو گئی ہے!`
+          : `Appointment booked successfully! Token: ${token}`,
+        'success'
+      );
+    }
+
+    onQuickBook(quickName, quickPhone, quickDept, finalDate);
     setFormSubmitted(true);
-    setTimeout(() => setFormSubmitted(false), 4000);
+    setTimeout(() => setFormSubmitted(false), 5000);
   };
 
   return (
@@ -246,12 +306,17 @@ export const Hero: React.FC<HeroProps> = ({
                     <p className={`font-semibold text-emerald-900 ${isUrdu ? 'font-urdu' : ''}`}>
                       {t.quickSuccess}
                     </p>
+                    {quickToken && (
+                      <p className="font-mono font-bold text-xs text-[#1E5AA8] bg-white px-2.5 py-1 rounded-md border border-blue-200 inline-block">
+                        Token: {quickToken}
+                      </p>
+                    )}
                     <p className="text-xs text-emerald-700">
-                      {isUrdu ? 'آپ کو مکمل فارم پر منتقل کیا جا رہا ہے...' : 'Redirecting to full appointment manager...'}
+                      {isUrdu ? 'اپوائنٹمنٹ درج ہو گئی ہے۔ آپ کو تصدیق پر منتقل کیا جا رہا ہے...' : 'Appointment registered! Showing details below...'}
                     </p>
                   </div>
                 ) : (
-                  <form onSubmit={handleQuickSubmit} className="space-y-4">
+                  <form onSubmit={handleQuickSubmit} noValidate className="space-y-4">
                     <div>
                       <label className={`block text-xs font-semibold text-slate-700 mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
                         {t.fullName}
@@ -276,7 +341,6 @@ export const Hero: React.FC<HeroProps> = ({
                         value={quickPhone}
                         onChange={(e) => setQuickPhone(e.target.value)}
                         placeholder="0300-1234567"
-                        pattern="^03[0-9]{2}-?[0-9]{7}$"
                         className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-sm font-mono transition-all bg-slate-50/50"
                       />
                     </div>
@@ -307,7 +371,6 @@ export const Hero: React.FC<HeroProps> = ({
                           type="date"
                           required
                           value={quickDate}
-                          min={new Date().toISOString().split('T')[0]}
                           onChange={(e) => setQuickDate(e.target.value)}
                           className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm bg-slate-50/50"
                         />

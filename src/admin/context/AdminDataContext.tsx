@@ -58,6 +58,7 @@ import {
   formatDisplayPhone,
   cleanPhoneEmergency
 } from '../../utils/phoneUtils';
+import { triggerAdminPush, triggerPatientPush } from '../../utils/fcm';
 
 interface Toast {
   id: string;
@@ -735,9 +736,22 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               updatedAt: data.updatedAt || data.updated_at
             });
           });
-          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setAppointments(list);
-          persistSaved('appointments', list);
+
+          // Merge with any locally pending appointments so nothing gets wiped out
+          setAppointments((prevLocal) => {
+            const map = new Map<string, AdminAppointment>();
+            list.forEach((item) => map.set(item.token || item.id, item));
+            prevLocal.forEach((item) => {
+              const key = item.token || item.id;
+              if (!map.has(key)) {
+                map.set(key, item);
+              }
+            });
+            const merged = Array.from(map.values());
+            merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            persistSaved('appointments', merged);
+            return merged;
+          });
           setCloudSyncStatus('active');
         },
         (error) => {
@@ -969,6 +983,14 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return next;
     });
 
+    try {
+      const tokens: string[] = JSON.parse(localStorage.getItem('dad_booked_tokens') || '[]');
+      if (!tokens.includes(token)) {
+        tokens.push(token);
+        localStorage.setItem('dad_booked_tokens', JSON.stringify(tokens));
+      }
+    } catch {}
+
     if (isFirebaseActive) {
       // 1. Write the full appointment record with all field aliases for bulletproof compatibility
       const firestorePayload = {
@@ -1026,6 +1048,15 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createdAt: new Date().toISOString()
       }).catch((err) => console.warn('Could not create admin notification:', err));
 
+      // 2b. Dispatch real mobile FCM Push notification to all Admin devices
+      triggerAdminPush({
+        title: 'New Appointment Booked 🩺',
+        body: `${cleanPatientName} (${cleanPhone}) booked [${newApp.token}] for ${newApp.appointmentDate || 'upcoming'} (${newApp.timeSlot || 'OPD'}).`,
+        token: newApp.token,
+        type: 'appointment',
+        url: '/#admin'
+      }).catch(() => {});
+
       // 3. Write real-time notification for Patient device
       if (newApp.patientId || cleanPhone) {
         addDoc(collection(db, 'notifications'), {
@@ -1038,6 +1069,17 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           read: false,
           createdAt: new Date().toISOString()
         }).catch((err) => console.warn('Could not create patient notification:', err));
+
+        // Dispatch FCM Push notification to the Patient's device
+        triggerPatientPush({
+          phone: cleanPhone,
+          patientId: newApp.patientId,
+          title: 'Appointment Booked Successfully 🩺',
+          body: `Your appointment [${newApp.token}] for ${newApp.appointmentDate} (${newApp.timeSlot}) has been confirmed on record.`,
+          token: newApp.token,
+          type: 'reminder',
+          url: '/#appointment'
+        }).catch(() => {});
       }
     }
 
@@ -1046,6 +1088,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
+    const target = appointments.find((a) => a.id === id);
     setAppointments((prev) => {
       const next = prev.map((a) => (a.id === id ? { ...a, status } : a));
       persistSaved('appointments', next);
@@ -1058,6 +1101,44 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       await updateDoc(doc(db, 'appointments', id), { status }).catch((err) =>
         console.warn('Background sync appointment status:', err)
       );
+
+      // Trigger FCM Push notification to Patient when status is confirmed, completed, or cancelled
+      if (target) {
+        const cleanPhone = (target.phone || '').trim();
+        const patientId = target.patientId || '';
+        let title = 'Appointment Status Update 🩺';
+        let body = `Your appointment token ${target.token} status has been updated to ${status}.`;
+
+        if (status === 'confirmed') {
+          title = 'Appointment Confirmed! ✓';
+          body = `Good news! Your appointment [${target.token}] for ${target.appointmentDate} (${target.timeSlot}) is confirmed by Dar al Dawa Medical Center.`;
+        } else if (status === 'cancelled') {
+          title = 'Appointment Cancelled ⚠️';
+          body = `Your appointment [${target.token}] for ${target.appointmentDate} has been cancelled. Please contact reception if you need to reschedule.`;
+        }
+
+        if (cleanPhone || patientId) {
+          triggerPatientPush({
+            phone: cleanPhone,
+            patientId,
+            title,
+            body,
+            token: target.token,
+            type: status === 'confirmed' ? 'appointment_confirmed' : status === 'cancelled' ? 'appointment_cancelled' : 'reminder'
+          }).catch(() => {});
+
+          addDoc(collection(db, 'notifications'), {
+            role: 'patient',
+            userId: patientId,
+            phone: cleanPhone,
+            title,
+            message: body,
+            type: 'appointment_status',
+            read: false,
+            createdAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+      }
     }
   };
 
@@ -1540,6 +1621,13 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
     if (isFirebaseActive) {
       setDoc(doc(db, 'messages', newId), newMsg).catch((e) => console.warn(e));
+      
+      triggerAdminPush({
+        title: 'New Patient Inquiry 📩',
+        body: `${newMsg.name} (${newMsg.phone || newMsg.email}): ${newMsg.subject || newMsg.message.slice(0, 60)}`,
+        type: 'inquiry',
+        url: '/#admin'
+      }).catch(() => {});
     }
   };
 

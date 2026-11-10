@@ -272,6 +272,21 @@
         "createdAt": { "type": "string" }
       },
       "required": ["title", "message", "role"]
+    },
+    "FCMToken": {
+      "title": "FCM Device Token",
+      "description": "Registered device push notification token for FCM mobile and desktop alerts",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "patient", "guest"] },
+        "phone": { "type": "string" },
+        "deviceType": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["token", "role", "updatedAt"]
     }
   },
   "firestore": {
@@ -346,6 +361,10 @@
     "/notifications/{notifId}": {
       "schema": "Notification",
       "description": "Real-time alerts for staff and patients"
+    },
+    "/fcm_tokens/{tokenId}": {
+      "schema": "FCMToken",
+      "description": "Active FCM device tokens for real push notification delivery"
     }
   }
 }

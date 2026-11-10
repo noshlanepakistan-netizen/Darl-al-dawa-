@@ -56,6 +56,39 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
 
+  // Quick Guest/Direct Phone Login for immediate access
+  const handleQuickPhoneAccess = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phone.trim()) {
+      setError(isUrdu ? 'براہ کرم اپنا موبائل نمبر درج کریں۔' : 'Please enter your mobile phone number.');
+      return;
+    }
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.length < 7) {
+      setError(isUrdu ? 'براہ کرم درست موبائل نمبر درج کریں۔' : 'Please enter a valid phone number.');
+      return;
+    }
+
+    const patientName = fullName.trim() || `Patient ${cleanDigits.slice(-4)}`;
+    const guestProfile = {
+      id: `p-${cleanDigits}`,
+      email: `${cleanDigits}@daraldawa.patient`,
+      fullName: patientName,
+      phone: phone.trim(),
+      gender: gender || 'Male',
+      city: city || 'Lahore',
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem('dad_patient_session_user', JSON.stringify(guestProfile));
+      // Trigger instant sign in
+      window.location.reload();
+    } catch {
+      onClose();
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     setError(null);
     setSuccess(null);
@@ -73,10 +106,11 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
         }, 800);
       } else {
         if (res.error === 'UNAUTHORIZED_DOMAIN' || res.error?.includes('unauthorized-domain')) {
+          // Graceful fallback: switch to direct mobile/email login without showing domain error
           setError(
             isUrdu
-              ? 'براہ کرم اپنا موبائل نمبر یا ای میل درج کر کے براہ راست رجسٹر یا لاگ ان کریں۔'
-              : 'Please enter your mobile number or email below to register or sign in directly.'
+              ? 'براہ کرم نیچے اپنا موبائل نمبر یا ای میل اور پاس ورڈ درج کر کے لاگ ان یا رجسٹر کریں۔'
+              : 'Please enter your mobile number or email and password below to sign in or register directly.'
           );
         } else {
           setError(res.error || 'Google sign-in failed.');
@@ -86,8 +120,8 @@ export const PatientAuthModal: React.FC<PatientAuthModalProps> = ({
       if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
         setError(
           isUrdu
-            ? 'براہ کرم اپنا موبائل نمبر یا ای میل درج کر کے براہ راست رجسٹر یا لاگ ان کریں۔'
-            : 'Please enter your mobile number or email below to register or sign in directly.'
+            ? 'براہ کرم نیچے اپنا موبائل نمبر یا ای میل اور پاس ورڈ درج کر کے لاگ ان یا رجسٹر کریں۔'
+            : 'Please enter your mobile number or email and password below to sign in or register directly.'
         );
       } else {
         setError(err?.message || 'Google sign-in failed.');

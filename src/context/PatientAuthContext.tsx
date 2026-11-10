@@ -25,6 +25,7 @@ import { auth, db, isFirebaseConfigured } from '../firebase/config';
 import { tagPatientDevice, logoutOneSignal } from '../utils/oneSignal';
 import { cleanWhatsAppNumber } from '../utils/phoneUtils';
 import { playNotificationChime } from '../utils/audioChime';
+import { triggerAdminPush, triggerPatientPush, requestFcmToken } from '../utils/fcm';
 
 export const normalizePhone = (input: string): string => {
   let digits = input.replace(/\D/g, '');
@@ -55,6 +56,7 @@ interface PatientAuthContextType {
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   updateProfile: (updates: Partial<PatientProfile>) => Promise<{ success: boolean; error?: string }>;
   myAppointments: PatientAppointment[];
+  addPatientAppointment: (appointment: PatientAppointment) => void;
   cancelAppointment: (id: string) => Promise<{ success: boolean; error?: string }>;
   refreshAppointments: () => Promise<void>;
 }
@@ -64,7 +66,13 @@ const PatientAuthContext = createContext<PatientAuthContextType | undefined>(und
 export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [patient, setPatient] = useState<PatientProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [myAppointments, setMyAppointments] = useState<PatientAppointment[]>([]);
+  const [myAppointments, setMyAppointments] = useState<PatientAppointment[]>(() => {
+    try {
+      const saved = localStorage.getItem('dad_patient_my_appointments');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
 
   // Fetch patient profile from Firestore 'patients' collection
   const fetchPatientProfile = useCallback(async (userId: string, userEmail?: string, userDisplayName?: string) => {
@@ -200,10 +208,27 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, [fetchPatientProfile]);
 
+  // Instant local registration of a booked appointment so it immediately shows up in portal
+  const addPatientAppointment = useCallback((newAppt: PatientAppointment) => {
+    setMyAppointments((prev) => {
+      const updated = [newAppt, ...prev.filter((a) => a.token !== newAppt.token && a.id !== newAppt.id)];
+      try {
+        localStorage.setItem('dad_patient_my_appointments', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    try {
+      const tokens: string[] = JSON.parse(localStorage.getItem('dad_booked_tokens') || '[]');
+      if (newAppt.token && !tokens.includes(newAppt.token)) {
+        tokens.push(newAppt.token);
+        localStorage.setItem('dad_booked_tokens', JSON.stringify(tokens));
+      }
+    } catch {}
+  }, []);
+
   // Real-time listener for patient's appointments from Firestore
   useEffect(() => {
     if (!patient?.id && !patient?.phone && !patient?.email) {
-      setMyAppointments([]);
       return;
     }
 
@@ -214,36 +239,46 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         (snapshot) => {
           const list: PatientAppointment[] = [];
           const currentPatientId = (patient.id || '').trim();
-          const patientPhoneClean = patient.phone ? cleanWhatsAppNumber(patient.phone) : '';
+          const normPatientPhone = patient.phone ? normalizePhone(patient.phone) : '';
           const patientEmail = (patient.email || '').trim().toLowerCase();
           const patientName = (patient.fullName || '').trim().toLowerCase();
+          const bookedTokens: string[] = (() => {
+            try {
+              return JSON.parse(localStorage.getItem('dad_booked_tokens') || '[]');
+            } catch {
+              return [];
+            }
+          })();
 
           snapshot.forEach((docSnap) => {
             const a = docSnap.data();
+            const appToken = (a.token || `DAD-${docSnap.id.slice(-6).toUpperCase()}`).toString().trim();
             const appPatientId = (a.patientId || a.patient_id || '').toString().trim();
-            const appPhone = (a.phone || a.mobile || a.phoneNumber || a.phone_number || '').toString().trim();
-            const appPhoneClean = appPhone ? cleanWhatsAppNumber(appPhone) : '';
+            const rawPhone = (a.phone || a.mobile || a.phoneNumber || a.phone_number || '').toString().trim();
+            const normAppPhone = rawPhone ? normalizePhone(rawPhone) : '';
             const appEmail = (a.email || '').toString().trim().toLowerCase();
             const appPatientName = (a.patientName || a.patient_name || a.name || a.fullName || '').toString().trim().toLowerCase();
 
             // Match if:
             // 1. Patient ID matches
-            // 2. Cleaned phone number matches
+            // 2. Normalized phone number matches
             // 3. Email matches
-            // 4. Exact full name matches if user is authenticated
+            // 4. Token was booked on this device
+            // 5. Patient name matches
             const isMatch =
-              (currentPatientId && appPatientId === currentPatientId) ||
-              (patientPhoneClean && appPhoneClean && patientPhoneClean === appPhoneClean) ||
+              (currentPatientId && appPatientId && currentPatientId === appPatientId) ||
+              (normPatientPhone && normAppPhone && normPatientPhone === normAppPhone) ||
               (patientEmail && appEmail && patientEmail === appEmail) ||
-              (patientName && appPatientName && patientName === appPatientName && (!appPhoneClean || patientPhoneClean === appPhoneClean));
+              (appToken && bookedTokens.includes(appToken)) ||
+              (patientName && appPatientName && patientName === appPatientName);
 
             if (isMatch) {
               list.push({
                 id: docSnap.id,
-                token: (a.token || `DAD-${docSnap.id.slice(-6).toUpperCase()}`).toString().trim(),
+                token: appToken,
                 patientId: appPatientId || currentPatientId,
                 patientName: (a.patientName || a.patient_name || a.name || patient.fullName || 'Patient').toString().trim(),
-                phone: (appPhone || patient.phone || '').toString().trim(),
+                phone: (rawPhone || patient.phone || '').toString().trim(),
                 cnic: a.cnic,
                 departmentId: (a.departmentId || a.department_id || '').toString(),
                 doctorId: (a.doctorId || a.doctor_id || '').toString(),
@@ -257,9 +292,23 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }
           });
 
-          // Sort by creation date descending
-          list.sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime());
-          setMyAppointments(list);
+          // Merge with any locally pending appointments so newly booked items never vanish
+          setMyAppointments((prevLocal) => {
+            const map = new Map<string, PatientAppointment>();
+            list.forEach((item) => map.set(item.token || item.id, item));
+            prevLocal.forEach((item) => {
+              const key = item.token || item.id;
+              if (!map.has(key)) {
+                map.set(key, item);
+              }
+            });
+            const merged = Array.from(map.values());
+            merged.sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime());
+            try {
+              localStorage.setItem('dad_patient_my_appointments', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         },
         (error) => {
           console.warn('Error listening to patient appointments:', error);
@@ -343,6 +392,24 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
           read: false,
           createdAt: new Date().toISOString()
         });
+
+        // Dispatch FCM Push notification to all Admin devices
+        triggerAdminPush({
+          title: 'New Patient Account Created 👤',
+          body: `${params.fullName} (${params.phone}) registered a new patient account from ${params.city}.`,
+          type: 'registration',
+          url: '/#admin'
+        }).catch(() => {});
+
+        // Dispatch FCM Push notification to the Patient's device
+        triggerPatientPush({
+          phone: params.phone.trim(),
+          patientId: uid,
+          title: 'Account Created Successfully 🎉',
+          body: `Welcome ${params.fullName}! Your Dar al Dawa patient account is now active.`,
+          type: 'reminder',
+          url: '/#appointment'
+        }).catch(() => {});
       } catch (err) {
         console.warn('Failed to insert initial notification:', err);
       }
@@ -365,6 +432,16 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
       } catch {}
       tagPatientDevice(uid, cleanEmail);
 
+      // Register FCM device token if notification permission is granted
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        requestFcmToken({
+          role: 'patient',
+          userId: uid,
+          phone: params.phone.trim(),
+          email: cleanEmail
+        }).catch(() => {});
+      }
+
       // Trigger phone vibration, audio chime, and native system notification
       try {
         playNotificationChime();
@@ -376,15 +453,6 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
             new Notification('Dar al Dawa Medical Center 🎉', {
               body: `Welcome ${params.fullName}! Your patient account is now active.`,
               icon: '/favicon.ico'
-            });
-          } else if (Notification.permission === 'default') {
-            Notification.requestPermission().then((perm) => {
-              if (perm === 'granted') {
-                new Notification('Dar al Dawa Medical Center 🎉', {
-                  body: `Welcome ${params.fullName}! Your patient account is now active.`,
-                  icon: '/favicon.ico'
-                });
-              }
             });
           }
         }
@@ -639,6 +707,7 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         forgotPassword,
         updateProfile,
         myAppointments,
+        addPatientAppointment,
         cancelAppointment,
         refreshAppointments
       }}

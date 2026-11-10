@@ -16,12 +16,14 @@ import {
   Clock,
   User,
   Copy,
-  AlertCircle
+  AlertCircle,
+  Bell
 } from 'lucide-react';
 import { DEPARTMENTS, DOCTORS, HOSPITAL_CONFIG } from '../../data/hospitalData';
 import { AdminAppointment, AppointmentStatus } from '../types';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { formatWhatsAppLink, triggerWhatsApp } from '../../utils/phoneUtils';
+import { requestFcmToken, triggerAdminPush } from '../../utils/fcm';
 
 interface AppointmentsPageProps {
   lang: 'en' | 'ur';
@@ -150,6 +152,37 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
     showToast('Appointments exported to CSV successfully!');
   };
 
+  const [testingPush, setTestingPush] = useState(false);
+
+  const handleTestAdminPush = async () => {
+    setTestingPush(true);
+    try {
+      const regRes = await requestFcmToken({ role: 'admin', userId: 'admin' });
+      if (!regRes.success && Notification.permission !== 'granted') {
+        showToast(regRes.error || 'Please allow notifications in browser', 'error');
+        setTestingPush(false);
+        return;
+      }
+
+      const res = await triggerAdminPush({
+        title: 'Dar al Dawa Admin Push Test 🩺',
+        body: 'FCM Mobile Push is operational! All hospital alerts are active.',
+        type: 'general',
+        url: '/#admin'
+      });
+
+      if (res) {
+        showToast('FCM Push notification sent to admin devices! ✓', 'success');
+      } else {
+        showToast('Push triggered (check your notifications bar)', 'info');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Push test failed', 'error');
+    } finally {
+      setTestingPush(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       
@@ -165,6 +198,17 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({ lang }) => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleTestAdminPush}
+            disabled={testingPush}
+            className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E5AA8] border border-blue-200 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+            title="Send test push notification to verified devices"
+          >
+            <Bell className="w-3.5 h-3.5" />
+            <span>{testingPush ? 'Testing...' : 'Test Mobile Push'}</span>
+          </button>
+
           <button
             type="button"
             onClick={exportToCSV}

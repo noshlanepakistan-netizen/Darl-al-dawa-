@@ -18,6 +18,7 @@ import { useAdminData } from '../admin/context/AdminDataContext';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { tagGuestDevice } from '../utils/oneSignal';
 import { formatWhatsAppLink, triggerWhatsApp } from '../utils/phoneUtils';
+import { playNotificationChime } from '../utils/audioChime';
 
 interface AppointmentSectionProps {
   lang: 'en' | 'ur';
@@ -38,8 +39,8 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
 }) => {
   const t = UI_TRANSLATIONS[lang].appointment;
   const isUrdu = lang === 'ur';
-  const { addAppointment, departments: liveDepts, doctors: liveDocs, hospitalConfig } = useAdminData();
-  const { patient, isAuthenticated } = usePatientAuth();
+  const { addAppointment, departments: liveDepts, doctors: liveDocs, hospitalConfig, showToast } = useAdminData();
+  const { patient, isAuthenticated, addPatientAppointment } = usePatientAuth();
 
   const deptsList = liveDepts || [];
   const docsList = liveDocs || [];
@@ -85,10 +86,10 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
   // Doctors matching current department
   const availableDoctors = docsList.filter((d) => d.departmentId === departmentId && d.active !== false);
 
-  // Validate Pakistani phone (accepts 03XX, +923XX, 923XX, 3XX, with any spaces or dashes)
+  // Validate phone (accepts standard mobile or landline: 7 to 15 digits)
   const validatePakistaniPhone = (value: string): boolean => {
     const digits = value.replace(/\D/g, '');
-    return digits.length >= 10 && digits.length <= 13;
+    return digits.length >= 7 && digits.length <= 15;
   };
 
   const handlePhoneChange = (val: string) => {
@@ -108,13 +109,11 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
 
     if (!validatePakistaniPhone(phone)) {
       newErrors.phone = isUrdu
-        ? 'براہ کرم درست پاکستانی نمبر درج کریں (مثلاً: 0300-1234567)'
-        : 'Please enter a valid Pakistani mobile number (e.g. 0300-1234567)';
+        ? 'براہ کرم درست رابطہ نمبر درج کریں (مثلاً: 0300-1234567)'
+        : 'Please enter a valid mobile number (e.g. 0300-1234567)';
     }
 
-    if (!appointmentDate) {
-      newErrors.date = isUrdu ? 'تاریخ منتخب کریں۔' : 'Please select preferred date.';
-    }
+    const finalDate = appointmentDate || new Date().toISOString().split('T')[0];
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -129,12 +128,11 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
       finalPhone = '0' + digits.slice(2);
     }
 
-    // Generate simulated Token ID
+    // Generate Token ID
     const randomToken = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
     setAppointmentToken(randomToken);
 
-    // Save to master Admin & Firestore database
-    addAppointment({
+    const appointmentPayload = {
       token: randomToken,
       patientId: patient?.id || '',
       patientName: patientName.trim(),
@@ -142,12 +140,42 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
       cnic: cnic.trim(),
       departmentId: departmentId || 'cardiology',
       doctorId: doctorId || '',
-      appointmentDate: appointmentDate || new Date().toISOString().split('T')[0],
+      appointmentDate: finalDate,
       timeSlot: timeSlot || 'morning',
       patientType: patientType || 'new',
       notes: notes.trim(),
-      status: 'pending'
-    });
+      status: 'pending' as const
+    };
+
+    // 1. Save to master Admin & Firestore database
+    addAppointment(appointmentPayload);
+
+    // 2. Save directly to Patient Appointments state & device storage so it appears instantly
+    if (addPatientAppointment) {
+      addPatientAppointment({
+        id: `app-${Date.now()}`,
+        ...appointmentPayload,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    // 3. Audio & Haptic Feedback on User's Phone
+    try {
+      playNotificationChime();
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([250, 100, 250]);
+      }
+    } catch {}
+
+    // 4. Show success toast notification
+    if (showToast) {
+      showToast(
+        isUrdu
+          ? `ٹوکن ${randomToken} کے ساتھ اپوائنٹمنٹ کامیابی سے درج ہو گئی ہے!`
+          : `Appointment booked successfully! Token: ${randomToken}`,
+        'success'
+      );
+    }
 
     setIsSubmitted(true);
   };
@@ -301,7 +329,7 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
             </div>
           ) : (
             /* Interactive Booking Form */
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} noValidate className="space-y-6">
               
               {/* Row 1: Patient Name & Phone */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -469,12 +497,15 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
                       type="date"
                       required
                       value={appointmentDate}
-                      min={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setAppointmentDate(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm outline-none focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100"
-                    >
-                    </input>
+                      className={`w-full pl-10 pr-4 py-2.5 rounded-xl border bg-white text-sm outline-none transition-all ${
+                        errors.date ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100'
+                      }`}
+                    />
                   </div>
+                  {errors.date && (
+                    <p className="text-red-500 text-xs mt-1">{errors.date}</p>
+                  )}
                 </div>
 
                 <div>
