@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { doc, getDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../../firebase/config';
+import { PatientProfile, PatientAppointment } from '../../types/patient';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { useAdminData } from '../../admin/context/AdminDataContext';
 import { useNotifications } from '../../context/NotificationContext';
@@ -22,7 +25,14 @@ import {
   Building,
   Edit2,
   Save,
-  MessageSquare
+  MessageSquare,
+  RefreshCw,
+  History,
+  CalendarDays,
+  Filter,
+  CheckCircle,
+  XCircle,
+  CheckCheck
 } from 'lucide-react';
 import { formatWhatsAppLink, triggerWhatsApp } from '../../utils/phoneUtils';
 import { playNotificationChime } from '../../utils/audioChime';
@@ -45,7 +55,17 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const isUrdu = lang === 'ur';
 
-  const [activeTab, setActiveTab] = useState<'appointments' | 'book' | 'reports' | 'notifications' | 'profile'>('appointments');
+  // Live Fetched Patient Profile State directly from Firestore database
+  const [liveProfile, setLiveProfile] = useState<PatientProfile | null>(patient);
+  const [isFetchingProfile, setIsFetchingProfile] = useState<boolean>(false);
+
+  // Active Tab: Default to 'history'
+  const [activeTab, setActiveTab] = useState<'history' | 'appointments' | 'book' | 'reports' | 'notifications' | 'profile'>('history');
+
+  // Appointment History State, Live Fetching & Interactive Filters
+  const [firestoreAppointments, setFirestoreAppointments] = useState<PatientAppointment[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState<boolean>(false);
+  const [appointmentFilter, setAppointmentFilter] = useState<'all' | 'upcoming' | 'past' | 'pending' | 'confirmed' | 'cancelled'>('all');
 
   // Profile Edit State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -70,20 +90,256 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
   const [bookSuccessToken, setBookSuccessToken] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
+  // Automatically fetch logged-in user profile details from Firestore on modal open
   useEffect(() => {
-    if (patient?.phone && !bookPhone) {
-      setBookPhone(patient.phone);
-    }
-  }, [patient?.phone]);
+    if (!isOpen) return;
 
-  if (!isOpen || !patient) return null;
+    let isMounted = true;
+    const fetchLatestProfile = async () => {
+      const activeUid = auth.currentUser?.uid || patient?.id;
+      if (!activeUid) {
+        if (patient && isMounted) setLiveProfile(patient);
+        return;
+      }
+
+      setIsFetchingProfile(true);
+      try {
+        const patientDocRef = doc(db, 'patients', activeUid);
+        const snap = await getDoc(patientDocRef);
+
+        if (snap.exists() && isMounted) {
+          const data = snap.data();
+          const cleanEmail = (
+            data.email ||
+            auth.currentUser?.email ||
+            patient?.email ||
+            ''
+          ).toString().trim();
+
+          const cleanName = (
+            data.fullName ||
+            data.name ||
+            data.full_name ||
+            auth.currentUser?.displayName ||
+            patient?.fullName ||
+            'Patient'
+          ).toString().trim();
+
+          const cleanPhone = (
+            data.phone ||
+            data.mobile ||
+            data.phoneNumber ||
+            patient?.phone ||
+            ''
+          ).toString().trim();
+
+          const loadedProfile: PatientProfile = {
+            id: snap.id,
+            email: cleanEmail,
+            fullName: cleanName,
+            phone: cleanPhone,
+            gender: data.gender || patient?.gender || 'Male',
+            dateOfBirth: data.date_of_birth || data.dateOfBirth || patient?.dateOfBirth,
+            city: data.city || data.address || patient?.city || 'Lahore',
+            isBlocked: data.is_blocked || data.isBlocked || false,
+            createdAt: data.created_at || data.createdAt || patient?.createdAt || new Date().toISOString()
+          };
+
+          setLiveProfile(loadedProfile);
+          if (!isEditingProfile) {
+            setProfileName(cleanName);
+            setProfilePhone(cleanPhone);
+            setProfileGender(loadedProfile.gender);
+            if (loadedProfile.dateOfBirth) setProfileDob(loadedProfile.dateOfBirth);
+            if (loadedProfile.city) setProfileCity(loadedProfile.city);
+          }
+        } else if (isMounted) {
+          // If Firestore doc doesn't exist yet, derive from auth.currentUser or patient state
+          const fallback: PatientProfile = {
+            id: activeUid,
+            email: auth.currentUser?.email || patient?.email || '',
+            fullName: auth.currentUser?.displayName || patient?.fullName || 'Patient',
+            phone: patient?.phone || '',
+            gender: patient?.gender || 'Male',
+            city: patient?.city || 'Lahore',
+            createdAt: patient?.createdAt || new Date().toISOString()
+          };
+          setLiveProfile(fallback);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch patient profile from Firestore:', err);
+      } finally {
+        if (isMounted) setIsFetchingProfile(false);
+      }
+    };
+
+    fetchLatestProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, patient?.id]);
+
+  useEffect(() => {
+    const activePhone = liveProfile?.phone || patient?.phone;
+    if (activePhone && !bookPhone) {
+      setBookPhone(activePhone);
+    }
+  }, [liveProfile?.phone, patient?.phone]);
+
+  // Fetch user's appointments directly from Firestore
+  const fetchAppointmentsFromFirestore = useCallback(async () => {
+    const activeUid = auth.currentUser?.uid || liveProfile?.id || patient?.id;
+    const activePhone = liveProfile?.phone || patient?.phone;
+    const activeEmail = liveProfile?.email || patient?.email;
+    const activeName = (liveProfile?.fullName || patient?.fullName || '').toLowerCase().trim();
+
+    if (!activeUid && !activePhone && !activeEmail) return;
+
+    setIsLoadingAppointments(true);
+    try {
+      const apptsRef = collection(db, 'appointments');
+      const snap = await getDocs(apptsRef);
+      const list: PatientAppointment[] = [];
+
+      const normUserPhone = activePhone ? activePhone.replace(/\D/g, '').slice(-10) : '';
+      const normUserEmail = (activeEmail || '').toLowerCase().trim();
+      const bookedTokens: string[] = (() => {
+        try {
+          return JSON.parse(localStorage.getItem('dad_booked_tokens') || '[]');
+        } catch {
+          return [];
+        }
+      })();
+
+      snap.forEach((docSnap) => {
+        const a = docSnap.data();
+        const appToken = (a.token || `DAD-${docSnap.id.slice(-6).toUpperCase()}`).toString().trim();
+        const appPatientId = (a.patientId || a.patient_id || '').toString().trim();
+        const rawPhone = (a.phone || a.mobile || a.phoneNumber || a.phone_number || '').toString().trim();
+        const normAppPhone = rawPhone ? rawPhone.replace(/\D/g, '').slice(-10) : '';
+        const appEmail = (a.email || '').toString().trim().toLowerCase();
+        const appPatientName = (a.patientName || a.patient_name || a.name || a.fullName || '').toString().trim().toLowerCase();
+
+        const isMatch =
+          (activeUid && appPatientId && activeUid === appPatientId) ||
+          (normUserPhone && normAppPhone && normUserPhone === normAppPhone) ||
+          (normUserEmail && appEmail && normUserEmail === appEmail) ||
+          (appToken && bookedTokens.includes(appToken)) ||
+          (activeName && appPatientName && activeName === appPatientName);
+
+        if (isMatch) {
+          list.push({
+            id: docSnap.id,
+            token: appToken,
+            patientId: appPatientId || activeUid,
+            patientName: (a.patientName || a.patient_name || a.name || liveProfile?.fullName || 'Patient').toString().trim(),
+            phone: (rawPhone || activePhone || '').toString().trim(),
+            cnic: a.cnic,
+            departmentId: (a.departmentId || a.department_id || '').toString(),
+            doctorId: (a.doctorId || a.doctor_id || '').toString(),
+            appointmentDate: (a.appointmentDate || a.appointment_date || a.date || '').toString(),
+            timeSlot: (a.timeSlot || a.time_slot || a.time || 'morning').toString(),
+            patientType: (a.patientType || a.patient_type || 'new') as 'new' | 'followup',
+            notes: a.notes,
+            status: (a.status as any) || 'pending',
+            createdAt: (a.createdAt || a.created_at || new Date().toISOString()).toString()
+          });
+        }
+      });
+
+      list.sort((x, y) => {
+        const dX = new Date(x.appointmentDate || x.createdAt).getTime();
+        const dY = new Date(y.appointmentDate || y.createdAt).getTime();
+        return dY - dX;
+      });
+
+      setFirestoreAppointments(list);
+    } catch (err) {
+      console.warn('Error fetching appointments history from Firestore:', err);
+    } finally {
+      setIsLoadingAppointments(false);
+    }
+  }, [liveProfile?.id, liveProfile?.phone, liveProfile?.email, liveProfile?.fullName, patient?.id, patient?.phone, patient?.email, patient?.fullName]);
+
+  // Sync on modal open & subscribe to live appointment status updates
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchAppointmentsFromFirestore();
+
+    try {
+      const unsubscribe = onSnapshot(collection(db, 'appointments'), () => {
+        fetchAppointmentsFromFirestore();
+      });
+      return () => unsubscribe();
+    } catch {
+      // ignore
+    }
+  }, [isOpen, fetchAppointmentsFromFirestore]);
+
+  const currentPatient = liveProfile || patient || (auth.currentUser ? {
+    id: auth.currentUser.uid,
+    email: auth.currentUser.email || '',
+    fullName: auth.currentUser.displayName || 'Patient',
+    phone: '',
+    gender: 'Male' as const,
+    city: 'Lahore',
+    createdAt: new Date().toISOString()
+  } : null);
+
+  // Helper date comparisons for upcoming vs past appointments
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const isUpcoming = (appt: PatientAppointment) => {
+    const d = appt.appointmentDate || appt.createdAt.split('T')[0];
+    return d >= todayStr && appt.status !== 'cancelled' && appt.status !== 'completed';
+  };
+
+  const isPast = (appt: PatientAppointment) => {
+    const d = appt.appointmentDate || appt.createdAt.split('T')[0];
+    return d < todayStr || appt.status === 'completed' || appt.status === 'cancelled';
+  };
+
+  // Combine Firestore query results + local state appointments
+  const combinedAppointments = (() => {
+    const map = new Map<string, PatientAppointment>();
+    firestoreAppointments.forEach((a) => map.set(a.token || a.id, a));
+    myAppointments.forEach((a) => {
+      const key = a.token || a.id;
+      if (!map.has(key)) map.set(key, a);
+    });
+    const list = Array.from(map.values());
+    list.sort((x, y) => {
+      const dX = new Date(x.appointmentDate || x.createdAt).getTime();
+      const dY = new Date(y.appointmentDate || y.createdAt).getTime();
+      return dY - dX;
+    });
+    return list;
+  })();
+
+  const upcomingCount = combinedAppointments.filter(isUpcoming).length;
+  const pastCount = combinedAppointments.filter(isPast).length;
+  const pendingCount = combinedAppointments.filter((a) => a.status === 'pending').length;
+  const confirmedCount = combinedAppointments.filter((a) => a.status === 'confirmed').length;
+  const cancelledCount = combinedAppointments.filter((a) => a.status === 'cancelled').length;
+
+  const filteredAppointments = combinedAppointments.filter((a) => {
+    if (appointmentFilter === 'upcoming') return isUpcoming(a);
+    if (appointmentFilter === 'past') return isPast(a);
+    if (appointmentFilter === 'pending') return a.status === 'pending';
+    if (appointmentFilter === 'confirmed') return a.status === 'confirmed';
+    if (appointmentFilter === 'cancelled') return a.status === 'cancelled';
+    return true;
+  });
+
+  if (!isOpen || !currentPatient) return null;
 
   // Patient's lab reports matched by phone
   const patientLabReports = labReports.filter(
-    (r) => r.patientPhone && patient.phone && (
-      r.patientPhone.replace(/\D/g, '') === patient.phone.replace(/\D/g, '') ||
-      r.patientPhone.includes(patient.phone) ||
-      patient.phone.includes(r.patientPhone)
+    (r) => r.patientPhone && currentPatient.phone && (
+      r.patientPhone.replace(/\D/g, '') === currentPatient.phone.replace(/\D/g, '') ||
+      r.patientPhone.includes(currentPatient.phone) ||
+      currentPatient.phone.includes(r.patientPhone)
     )
   );
 
@@ -101,6 +357,14 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
     if (res.success) {
       setProfileFeedback('Profile details updated successfully!');
       setIsEditingProfile(false);
+      setLiveProfile((prev) => prev ? {
+        ...prev,
+        fullName: profileName.trim(),
+        phone: profilePhone.trim(),
+        gender: profileGender,
+        dateOfBirth: profileDob || undefined,
+        city: profileCity.trim()
+      } : null);
     } else {
       setProfileFeedback(res.error || 'Failed to update profile.');
     }
@@ -109,13 +373,13 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
   const handleDashboardBooking = (e: React.FormEvent) => {
     e.preventDefault();
     const token = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
-    const finalPhone = (bookPhone || patient.phone || '').trim();
+    const finalPhone = (bookPhone || currentPatient.phone || '').trim();
     const finalDate = bookDate || new Date().toISOString().split('T')[0];
 
     const payload = {
       token,
-      patientId: patient.id,
-      patientName: patient.fullName || 'Patient',
+      patientId: currentPatient.id,
+      patientName: currentPatient.fullName || 'Patient',
       phone: finalPhone,
       departmentId: bookDeptId || 'cardiology',
       doctorId: bookDoctorId || '',
@@ -172,51 +436,110 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
     <div className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto ${isUrdu ? 'font-urdu' : 'font-body'}`}>
       <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
         
-        {/* Header Bar */}
-        <div className="bg-[#1F2933] text-white p-5 sm:p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1E5AA8] to-teal-600 flex items-center justify-center font-bold text-lg text-white shadow-md border border-white/20">
-              {patient.fullName ? patient.fullName.charAt(0).toUpperCase() : 'P'}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white">{patient.fullName}</h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                  {isUrdu ? 'مریض پورٹل' : 'Verified Patient'}
-                </span>
+        {/* Top 'My Account' Profile Bar - Fetches & Displays User Name and Email Prominently */}
+        <div className="bg-[#1F2933] text-white p-4 sm:p-6 border-b border-slate-800">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="relative shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1E5AA8] via-blue-600 to-teal-500 flex items-center justify-center font-bold text-xl text-white shadow-lg border border-white/20">
+                  {currentPatient.fullName ? currentPatient.fullName.charAt(0).toUpperCase() : 'P'}
+                </div>
+                <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#1F2933]" title="Online Patient" />
               </div>
-              <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3 mt-0.5">
-                <span className="font-mono text-slate-300">{patient.phone}</span>
-                <span>•</span>
-                <span className="truncate max-w-xs">{patient.email}</span>
-                <span>•</span>
-                <span>{patient.city}</span>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider">
+                    {isUrdu ? 'میرا اکاؤنٹ' : 'My Account'}
+                  </span>
+                  <span className="text-slate-500">•</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    <span>{isUrdu ? 'تصدیق شدہ مریض' : 'Verified Patient'}</span>
+                  </span>
+                  {isFetchingProfile && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-blue-300 animate-pulse font-mono">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>{isUrdu ? 'تازہ ڈیٹا...' : 'Fetching live profile...'}</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Patient Full Name */}
+                <h2 className="text-lg sm:text-xl font-bold text-white truncate mt-1">
+                  {currentPatient.fullName}
+                </h2>
+
+                {/* Logged-in User's Email & Details Displayed Clearly */}
+                <div className="text-xs text-slate-300 flex flex-wrap items-center gap-2 mt-2">
+                  {/* Email Box */}
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-blue-200 shadow-2xs font-mono text-xs">
+                    <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span className="text-slate-400 text-[10px] uppercase font-sans font-bold">{isUrdu ? 'ای میل:' : 'Email:'}</span>
+                    <span className="font-semibold text-white truncate max-w-[240px] sm:max-w-[320px]">
+                      {currentPatient.email || (isUrdu ? 'کوئی ای میل نہیں' : 'No email attached')}
+                    </span>
+                  </div>
+
+                  {/* Phone Box */}
+                  {currentPatient.phone && (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-emerald-300 shadow-2xs font-mono text-xs">
+                      <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="text-slate-400 text-[10px] uppercase font-sans font-bold">{isUrdu ? 'فون:' : 'Phone:'}</span>
+                      <span className="font-semibold text-white">{currentPatient.phone}</span>
+                    </div>
+                  )}
+
+                  {/* City Box */}
+                  {currentPatient.city && (
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/60 text-slate-300 text-xs">
+                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span>{currentPatient.city}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-center">
-            <button
-              onClick={() => {
-                logout();
-                onClose();
-              }}
-              type="button"
-              className="px-3 py-1.5 rounded-xl bg-red-950/60 hover:bg-red-900 text-rose-300 border border-red-800/60 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Sign Out"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>{isUrdu ? 'لاگ آؤٹ' : 'Logout'}</span>
-            </button>
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center gap-2 self-start md:self-center shrink-0">
+              {onNavigateToBooking && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onNavigateToBooking();
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer whitespace-nowrap active:scale-95"
+                  title="Open Hospital Appointment Form"
+                >
+                  <CalendarCheck className="w-3.5 h-3.5" />
+                  <span>{isUrdu ? 'اپوائنٹمنٹ فارم کھولیں' : 'Open Booking Form'}</span>
+                </button>
+              )}
 
-            <button
-              onClick={onClose}
-              type="button"
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-              aria-label="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
+              <button
+                onClick={() => {
+                  logout();
+                  onClose();
+                }}
+                type="button"
+                className="px-3 py-2 rounded-xl bg-red-950/60 hover:bg-red-900 text-rose-300 border border-red-800/60 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{isUrdu ? 'لاگ آؤٹ' : 'Logout'}</span>
+              </button>
+
+              <button
+                onClick={onClose}
+                type="button"
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -224,17 +547,17 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
         <div className="bg-slate-100 border-b border-slate-200 px-4 sm:px-6 flex items-center gap-2 overflow-x-auto scrollbar-none py-2 text-xs font-semibold">
           <button
             type="button"
-            onClick={() => setActiveTab('appointments')}
+            onClick={() => setActiveTab('history')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'appointments'
+              activeTab === 'history' || activeTab === 'appointments'
                 ? 'bg-white text-[#1E5AA8] shadow-xs font-bold border border-slate-200'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <CalendarCheck className="w-4 h-4 text-[#1E5AA8]" />
-            <span>{isUrdu ? 'میری اپوائنٹمنٹس' : 'My Appointments'}</span>
+            <History className="w-4 h-4 text-[#1E5AA8]" />
+            <span>{isUrdu ? 'اپوائنٹمنٹ ہسٹری' : 'Appointment History'}</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-100 text-[#1E5AA8] font-bold">
-              {myAppointments.length}
+              {combinedAppointments.length}
             </span>
           </button>
 
@@ -302,112 +625,355 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
         {/* Tab Content Area */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           
-          {/* TAB 1: APPOINTMENTS */}
-          {activeTab === 'appointments' && (
+          {/* TAB 1: APPOINTMENT HISTORY (PAST & UPCOMING) */}
+          {(activeTab === 'history' || activeTab === 'appointments') && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              {/* Header and Actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    {isUrdu ? 'آپ کی ہسپتال اپوائنٹمنٹس' : 'Your Hospital Appointments'}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    {isUrdu ? 'تمام ماضی اور آنے والی اپوائنٹمنٹس کی مکمل تفصیل۔' : 'Track schedule, consultation tokens, and doctor status.'}
+                  <div className="flex items-center gap-2">
+                    <History className="w-5 h-5 text-[#1E5AA8]" />
+                    <h3 className="text-base font-bold text-slate-900">
+                      {isUrdu ? 'اپوائنٹمنٹ کی مکمل ہسٹری اور شیڈول' : 'Appointment History & Schedule'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {isUrdu
+                      ? 'کلاؤڈ ڈیٹا بیس سے لائیو ریکارڈز (ماضی و آئندہ وزٹ، ٹوکن، اسٹیٹس اور ڈاکٹر کی تفصیل)'
+                      : 'Live records fetched from hospital database (past & upcoming visits, status, tokens)'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('book')}
-                  className="px-3.5 py-2 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{isUrdu ? 'نئی بکنگ' : 'Book New'}</span>
-                </button>
-              </div>
 
-              {myAppointments.length === 0 ? (
-                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
-                  <Calendar className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-700">No appointments recorded yet.</p>
-                  <p className="text-xs text-slate-500 mt-1">Book your first doctor appointment online in seconds.</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fetchAppointmentsFromFirestore()}
+                    disabled={isLoadingAppointments}
+                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-300 disabled:opacity-60"
+                    title="Refresh appointment list from Firestore"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isLoadingAppointments ? 'animate-spin' : ''}`} />
+                    <span>{isUrdu ? 'ریفریش' : 'Refresh'}</span>
+                  </button>
+
+                  {onNavigateToBooking && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onNavigateToBooking();
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#1E5AA8] hover:bg-[#154685] text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <CalendarCheck className="w-3.5 h-3.5" />
+                      <span>{isUrdu ? 'آن لائن فارم کھولیں' : 'Open Full Form'}</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => setActiveTab('book')}
-                    className="mt-4 px-4 py-2 rounded-xl bg-[#1E5AA8] text-white text-xs font-bold hover:bg-[#154685] transition-colors cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    Book Appointment Now
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isUrdu ? 'فوری بکنگ' : 'Quick Book'}</span>
                   </button>
+                </div>
+              </div>
+
+              {/* Summary Metrics Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
+                <div
+                  onClick={() => setAppointmentFilter('all')}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                    appointmentFilter === 'all'
+                      ? 'bg-blue-50/80 border-blue-300 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                    {isUrdu ? 'کل بکنگز' : 'Total'}
+                  </div>
+                  <div className="text-xl font-bold text-[#1E5AA8] mt-0.5">
+                    {combinedAppointments.length}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setAppointmentFilter('upcoming')}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                    appointmentFilter === 'upcoming'
+                      ? 'bg-emerald-50/80 border-emerald-300 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide flex items-center gap-1">
+                    <span>{isUrdu ? 'آئندہ وزٹس' : 'Upcoming'}</span>
+                  </div>
+                  <div className="text-xl font-bold text-emerald-600 mt-0.5">
+                    {upcomingCount}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setAppointmentFilter('confirmed')}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                    appointmentFilter === 'confirmed'
+                      ? 'bg-teal-50/80 border-teal-300 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold text-teal-700 uppercase tracking-wide">
+                    {isUrdu ? 'کنفرمڈ' : 'Confirmed'}
+                  </div>
+                  <div className="text-xl font-bold text-teal-700 mt-0.5">
+                    {confirmedCount}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setAppointmentFilter('pending')}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                    appointmentFilter === 'pending'
+                      ? 'bg-amber-50/80 border-amber-300 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">
+                    {isUrdu ? 'پینڈنگ' : 'Pending'}
+                  </div>
+                  <div className="text-xl font-bold text-amber-600 mt-0.5">
+                    {pendingCount}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setAppointmentFilter('past')}
+                  className={`col-span-2 sm:col-span-1 p-3 rounded-2xl border transition-all cursor-pointer ${
+                    appointmentFilter === 'past'
+                      ? 'bg-slate-100 border-slate-400 shadow-xs'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                    {isUrdu ? 'سابقہ / مکمل' : 'Past'}
+                  </div>
+                  <div className="text-xl font-bold text-slate-700 mt-0.5">
+                    {pastCount}
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1 text-xs">
+                <span className="text-slate-400 font-semibold flex items-center gap-1 text-[11px] shrink-0">
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>{isUrdu ? 'فلٹر:' : 'Filter:'}</span>
+                </span>
+                {[
+                  { id: 'all', label: isUrdu ? 'تمام' : 'All', count: combinedAppointments.length },
+                  { id: 'upcoming', label: isUrdu ? 'آئندہ وزٹس' : 'Upcoming', count: upcomingCount },
+                  { id: 'past', label: isUrdu ? 'سابقہ' : 'Past', count: pastCount },
+                  { id: 'pending', label: isUrdu ? 'پینڈنگ ریویو' : 'Pending', count: pendingCount },
+                  { id: 'confirmed', label: isUrdu ? 'کنفرم شدہ' : 'Confirmed', count: confirmedCount },
+                  { id: 'cancelled', label: isUrdu ? 'منسوخ شدہ' : 'Cancelled', count: cancelledCount }
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setAppointmentFilter(f.id as any)}
+                    className={`px-3 py-1 rounded-xl font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                      appointmentFilter === f.id
+                        ? 'bg-[#1E5AA8] text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <span>{f.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        appointmentFilter === f.id ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {f.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Loading Indicator */}
+              {isLoadingAppointments && combinedAppointments.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200">
+                  <RefreshCw className="w-8 h-8 text-[#1E5AA8] animate-spin mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-700">
+                    {isUrdu ? 'کلاؤڈ ڈیٹا بیس سے اپوائنٹمنٹس لوڈ ہو رہی ہیں...' : 'Fetching appointments from cloud database...'}
+                  </p>
+                </div>
+              ) : filteredAppointments.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                  <Calendar className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-700">
+                    {appointmentFilter === 'all'
+                      ? (isUrdu ? 'کوئی اپوائنٹمنٹ ریکارڈ نہیں ملا' : 'No appointments recorded yet.')
+                      : (isUrdu ? `کوئی "${appointmentFilter}" اپوائنٹمنٹ نہیں ہے` : `No ${appointmentFilter} appointments found.`)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {appointmentFilter === 'all'
+                      ? (isUrdu ? 'چند سیکنڈ میں آن لائن او پی ڈی کنسلٹیشن بک کریں۔' : 'Book your doctor appointment online in seconds.')
+                      : (isUrdu ? 'تمام ریکارڈز دیکھنے کے لیے فلٹر کو تمام پر تبدیل کریں۔' : 'Try clearing the filter to view all appointment history.')}
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                    {appointmentFilter !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setAppointmentFilter('all')}
+                        className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        {isUrdu ? 'تمام ریکارڈز دیکھیں' : 'Show All Appointments'}
+                      </button>
+                    )}
+                    {onNavigateToBooking && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onNavigateToBooking();
+                        }}
+                        className="px-4 py-2 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      >
+                        <CalendarCheck className="w-4 h-4" />
+                        <span>{isUrdu ? 'اپوائنٹمنٹ فارم پر جائیں' : 'Go to Appointment Form'}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('book')}
+                      className="px-4 py-2 rounded-xl bg-[#1E5AA8] text-white text-xs font-bold hover:bg-[#154685] transition-colors cursor-pointer"
+                    >
+                      {isUrdu ? 'یہاں فوری بک کریں' : 'Quick Book Here'}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {myAppointments.map((appt) => {
+                  {filteredAppointments.map((appt) => {
                     const deptObj = departments.find((d) => d.id === appt.departmentId);
                     const docObj = doctors.find((d) => d.id === appt.doctorId);
+                    const upcoming = isUpcoming(appt);
 
                     return (
                       <div
-                        key={appt.id}
-                        className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        key={appt.id || appt.token}
+                        className={`bg-white p-4 rounded-2xl border transition-shadow shadow-2xs hover:shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                          upcoming ? 'border-emerald-200/90' : 'border-slate-200/90'
+                        }`}
                       >
-                        <div className="space-y-1.5">
+                        <div className="space-y-2 min-w-0">
+                          {/* Badges: Token, Status, Upcoming/Past, Department */}
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono font-bold text-xs text-[#1E5AA8] bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
-                              {appt.token}
+                            <span className="font-mono font-bold text-xs text-[#1E5AA8] bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200">
+                              #{appt.token}
                             </span>
+                            
                             {getStatusBadge(appt.status)}
-                            <span className="text-xs font-semibold text-slate-800">
-                              {isUrdu ? deptObj?.titleUrdu : deptObj?.title || appt.departmentId}
+
+                            {upcoming ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                                <span>{isUrdu ? 'آئندہ وزٹ' : 'Upcoming Visit'}</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                {isUrdu ? 'سابقہ وزٹ' : 'Past Visit'}
+                              </span>
+                            )}
+
+                            <span className="text-xs font-semibold text-slate-700">
+                              {isUrdu ? deptObj?.titleUrdu || appt.departmentId : deptObj?.title || appt.departmentId}
                             </span>
                           </div>
 
-                          <div className="text-sm font-bold text-slate-900">
-                            {docObj ? (isUrdu ? docObj.nameUrdu : docObj.name) : (isUrdu ? 'ماہر کنسلٹنٹ ڈاکٹر' : 'Specialist Consultant')}
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{appt.appointmentDate}</span>
+                          {/* Doctor Name & Consultation Type */}
+                          <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                            <span>
+                              {docObj
+                                ? isUrdu
+                                  ? docObj.nameUrdu
+                                  : docObj.name
+                                : isUrdu
+                                ? 'ماہر کنسلٹنٹ ڈاکٹر'
+                                : 'Specialist Consultant Doctor'}
                             </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="capitalize">{appt.timeSlot}</span>
-                            </span>
-                            {appt.notes && (
-                              <span className="text-slate-400 italic">“{appt.notes}”</span>
+                            {docObj?.qualification && (
+                              <span className="text-[11px] font-normal text-slate-500 hidden sm:inline">
+                                ({docObj.qualification})
+                              </span>
                             )}
                           </div>
+
+                          {/* Date, Time, Patient Name & Registered Phone */}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                            <span className="flex items-center gap-1 font-medium text-slate-700">
+                              <Calendar className="w-3.5 h-3.5 text-[#1E5AA8]" />
+                              <span>{appt.appointmentDate || 'Date Scheduled'}</span>
+                            </span>
+                            <span className="flex items-center gap-1 capitalize font-medium text-slate-700">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{appt.timeSlot} slot</span>
+                            </span>
+                            {appt.patientName && (
+                              <span className="flex items-center gap-1 text-slate-600">
+                                <User className="w-3.5 h-3.5 text-slate-400" />
+                                <span>{appt.patientName}</span>
+                              </span>
+                            )}
+                            {appt.phone && (
+                              <span className="flex items-center gap-1 text-slate-600 font-mono">
+                                <Phone className="w-3 h-3 text-slate-400" />
+                                <span>{appt.phone}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Notes / Symptoms */}
+                          {appt.notes && (
+                            <p className="text-xs text-slate-500 italic bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 inline-block">
+                              “{appt.notes}”
+                            </p>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        {/* Actions (Cancel, WhatsApp Inquire) */}
+                        <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                           {appt.status === 'pending' && (
                             <button
                               type="button"
                               onClick={() => handleCancel(appt.id)}
                               disabled={cancellingId === appt.id}
                               className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                              title="Cancel Pending Appointment"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                              <span>{cancellingId === appt.id ? 'Cancelling...' : 'Cancel'}</span>
+                              <span>{cancellingId === appt.id ? 'Cancelling...' : (isUrdu ? 'منسوخ کریں' : 'Cancel')}</span>
                             </button>
                           )}
 
                           <a
                             href={formatWhatsAppLink(
                               hospitalConfig.contact.whatsapp,
-                              `Hello Dar al Dawa, I am inquiring about my appointment token ${appt.token} scheduled on ${appt.appointmentDate}.`
+                              `Hello Dar al Dawa, I am inquiring about my appointment token #${appt.token} scheduled on ${appt.appointmentDate} with ${docObj?.name || 'doctor'}.`
                             )}
                             onClick={(e) =>
                               triggerWhatsApp(
                                 hospitalConfig.contact.whatsapp,
-                                `Hello Dar al Dawa, I am inquiring about my appointment token ${appt.token} scheduled on ${appt.appointmentDate}.`,
+                                `Hello Dar al Dawa, I am inquiring about my appointment token #${appt.token} scheduled on ${appt.appointmentDate} with ${docObj?.name || 'doctor'}.`,
                                 e
                               )
                             }
                             rel="noopener noreferrer"
-                            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#2E9E5B] border border-emerald-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#2E9E5B] border border-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
-                            <span>WhatsApp Inquire</span>
+                            <span>{isUrdu ? 'واٹس ایپ رابطہ' : 'WhatsApp Inquire'}</span>
                           </a>
                         </div>
                       </div>
@@ -465,23 +1031,23 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
                       <input
                         type="text"
                         disabled
-                        value={patient.fullName}
+                        value={currentPatient.fullName}
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 cursor-not-allowed font-medium"
                       />
                     </div>
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">
-                        {isUrdu ? 'موبائل فون نمبر' : 'Mobile Phone'} {patient.phone ? '(Auto-filled)' : '*'}
+                        {isUrdu ? 'موبائل فون نمبر' : 'Mobile Phone'} {currentPatient.phone ? '(Auto-filled)' : '*'}
                       </label>
                       <input
                         type="tel"
                         required
-                        value={patient.phone || bookPhone}
+                        value={currentPatient.phone || bookPhone}
                         onChange={(e) => setBookPhone(e.target.value)}
-                        disabled={!!patient.phone}
+                        disabled={!!currentPatient.phone}
                         placeholder="0300-1234567"
                         className={`w-full px-3 py-2 rounded-xl border border-slate-200 font-mono font-medium ${
-                          patient.phone ? 'bg-slate-100 text-slate-700 cursor-not-allowed' : 'bg-white text-slate-900 focus:border-[#1E5AA8]'
+                          currentPatient.phone ? 'bg-slate-100 text-slate-700 cursor-not-allowed' : 'bg-white text-slate-900 focus:border-[#1E5AA8]'
                         }`}
                       />
                     </div>
@@ -589,7 +1155,7 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
               {patientLabReports.length === 0 ? (
                 <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
                   <FileCheck2 className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-700">No lab reports found for {patient.phone}</p>
+                  <p className="text-sm font-bold text-slate-700">No lab reports found for {currentPatient.phone || 'your account'}</p>
                   <p className="text-xs text-slate-500 mt-1">
                     When you perform blood, pathology or radiology tests at Dar al Dawa, your official verified report will appear here.
                   </p>
@@ -704,6 +1270,36 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
           {/* TAB 5: MY PROFILE */}
           {activeTab === 'profile' && (
             <div className="max-w-xl mx-auto space-y-4">
+              {/* Profile Card Header with Name & Email */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-[#1E5AA8] text-white font-bold text-lg flex items-center justify-center shrink-0 shadow-xs">
+                    {currentPatient.fullName ? currentPatient.fullName.charAt(0).toUpperCase() : 'P'}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-base text-slate-900 truncate">{currentPatient.fullName}</h4>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        {isUrdu ? 'ایکٹو' : 'Active'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-600 flex items-center gap-1.5 mt-0.5 font-mono">
+                      <Mail className="w-3.5 h-3.5 text-[#1E5AA8] shrink-0" />
+                      <span className="truncate">{currentPatient.email}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[11px] text-slate-400 font-mono block">
+                    {isUrdu ? 'مریض شناختی نمبر:' : 'Patient ID:'}
+                  </span>
+                  <span className="font-mono text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {currentPatient.id.slice(0, 10)}
+                  </span>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
@@ -763,8 +1359,8 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
                     <input
                       type="email"
                       disabled
-                      value={patient.email}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 text-slate-500 text-sm cursor-not-allowed"
+                      value={currentPatient.email}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 text-sm cursor-not-allowed font-medium font-mono"
                     />
                   </div>
                 </div>

@@ -121,6 +121,76 @@ export const requestFcmToken = async (params: {
 };
 
 /**
+ * Show a native device notification that reliably works across Android Chrome (via Service Worker)
+ * and Desktop browsers (via Notification API), with audio chime and haptic vibration.
+ */
+export const showDeviceNotification = async (
+  title: string,
+  options?: NotificationOptions & { url?: string }
+): Promise<boolean> => {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    // 1. Play audio chime and trigger mobile vibration
+    try {
+      playNotificationChime();
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([250, 100, 250]);
+      }
+    } catch {}
+
+    if (!('Notification' in window)) return false;
+
+    // Check or request permission
+    let perm = Notification.permission;
+    if (perm === 'default') {
+      try {
+        perm = await Notification.requestPermission();
+      } catch {
+        // ignore
+      }
+    }
+
+    if (perm !== 'granted') return false;
+
+    const notifOptions: any = {
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      vibrate: [250, 100, 250],
+      tag: 'dad-notification',
+      renotify: true,
+      ...options
+    };
+
+    // 2. Android Chrome REQUIRES ServiceWorkerRegistration.showNotification()
+    // Calling `new Notification()` directly in Android Chrome throws:
+    // "TypeError: Failed to construct 'Notification': Illegal constructor."
+    if ('serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && typeof reg.showNotification === 'function') {
+          await reg.showNotification(title, notifOptions);
+          return true;
+        }
+      } catch (swErr) {
+        console.warn('SW showNotification error, falling back:', swErr);
+      }
+    }
+
+    // 3. Fallback for Desktop Browsers (Chrome, Firefox, Safari)
+    try {
+      new Notification(title, notifOptions);
+      return true;
+    } catch (notifErr) {
+      console.warn('Direct new Notification() failed:', notifErr);
+    }
+  } catch (err) {
+    console.warn('showDeviceNotification error:', err);
+  }
+  return false;
+};
+
+/**
  * Listens for messages arriving while the website is in the active foreground tab
  */
 let isListenerAttached = false;
@@ -131,30 +201,16 @@ export const listenToForegroundMessages = () => {
   onMessage(messagingInstance, (payload) => {
     console.log('[FCM] Foreground push message received:', payload);
 
-    // Audio chime & phone vibration
-    try {
-      playNotificationChime();
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate([250, 100, 250]);
-      }
-    } catch {}
-
     const title = payload.notification?.title || payload.data?.title || 'Hospital Alert 🩺';
     const body = payload.notification?.body || payload.data?.body || payload.data?.message || '';
 
-    // Show native browser notification if granted
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(title, {
-          body,
-          icon: '/favicon.ico',
-          badge: '/favicon.ico',
-          tag: payload.data?.token || 'fcm-foreground'
-        });
-      } catch {
-        // ignore
-      }
-    }
+    // Show native device notification reliably (Android SW + Desktop)
+    showDeviceNotification(title, {
+      body,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: payload.data?.token || 'fcm-foreground'
+    }).catch(() => {});
   });
 };
 

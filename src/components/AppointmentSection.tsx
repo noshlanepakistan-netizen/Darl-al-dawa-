@@ -19,6 +19,7 @@ import { usePatientAuth } from '../context/PatientAuthContext';
 import { tagGuestDevice } from '../utils/oneSignal';
 import { formatWhatsAppLink, triggerWhatsApp } from '../utils/phoneUtils';
 import { playNotificationChime } from '../utils/audioChime';
+import { showDeviceNotification } from '../utils/fcm';
 
 interface AppointmentSectionProps {
   lang: 'en' | 'ur';
@@ -117,6 +118,36 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+
+      // 1. Haptic vibration feedback
+      try {
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          navigator.vibrate([150, 60, 150]);
+        }
+      } catch {}
+
+      // 2. Smoothly scroll directly to the first required field that is missing
+      const firstErrorKey = newErrors.patientName ? 'patientNameInput' : 'phoneInput';
+      const errorElement = document.getElementById(firstErrorKey);
+      if (errorElement) {
+        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => errorElement.focus(), 300);
+      } else {
+        const appointmentContainer = document.getElementById('appointment');
+        if (appointmentContainer) {
+          appointmentContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+
+      // 3. Show prominent toast notification explaining what is missing
+      if (showToast) {
+        showToast(
+          isUrdu
+            ? 'براہ کرم مریض کا نام اور درست موبائل فون نمبر درج کریں۔'
+            : 'Please enter patient name and a valid mobile number.',
+          'error'
+        );
+      }
       return;
     }
 
@@ -167,7 +198,19 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
       }
     } catch {}
 
-    // 4. Show success toast notification
+    // 4. Send native device notification (Android Chrome SW + Desktop)
+    showDeviceNotification(
+      isUrdu ? 'دار الدواء میڈیکل سنٹر 🩺' : 'Appointment Confirmed 🩺',
+      {
+        body: isUrdu
+          ? `محترم ${patientName.trim()}، آپ کی اپوائنٹمنٹ ٹوکن ${randomToken} کے ساتھ موصول ہو گئی ہے۔`
+          : `Dear ${patientName.trim()}, appointment token ${randomToken} has been recorded.`,
+        icon: '/favicon.ico',
+        tag: `appt-${randomToken}`
+      }
+    ).catch(() => {});
+
+    // 5. Show success toast notification
     if (showToast) {
       showToast(
         isUrdu
@@ -340,6 +383,7 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
                   <div className="relative">
                     <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
+                      id="patientNameInput"
                       type="text"
                       required
                       value={patientName}
@@ -362,6 +406,7 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
                   <div className="relative">
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
+                      id="phoneInput"
                       type="tel"
                       required
                       value={phone}
@@ -556,6 +601,18 @@ export const AppointmentSection: React.FC<AppointmentSectionProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Error summary alert right above submit button so mobile users immediately see why it cannot submit */}
+              {Object.keys(errors).length > 0 && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>
+                    {isUrdu
+                      ? '⚠️ براہ کرم اوپر مریض کا نام اور درست موبائل فون نمبر درج کریں۔'
+                      : '⚠️ Please enter Patient Name and valid Mobile Number above to complete booking.'}
+                  </span>
+                </div>
+              )}
 
               {/* Submit Button & Direct WhatsApp Link */}
               <div className="pt-2 flex flex-col sm:flex-row gap-3 items-center">

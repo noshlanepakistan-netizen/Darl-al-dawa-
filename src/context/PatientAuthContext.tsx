@@ -25,7 +25,7 @@ import { auth, db, isFirebaseConfigured } from '../firebase/config';
 import { tagPatientDevice, logoutOneSignal } from '../utils/oneSignal';
 import { cleanWhatsAppNumber } from '../utils/phoneUtils';
 import { playNotificationChime } from '../utils/audioChime';
-import { triggerAdminPush, triggerPatientPush, requestFcmToken } from '../utils/fcm';
+import { triggerAdminPush, triggerPatientPush, requestFcmToken, showDeviceNotification } from '../utils/fcm';
 
 export const normalizePhone = (input: string): string => {
   let digits = input.replace(/\D/g, '');
@@ -432,8 +432,8 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
       } catch {}
       tagPatientDevice(uid, cleanEmail);
 
-      // Register FCM device token if notification permission is granted
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      // 1. Immediately request notification permission & register FCM token
+      if (typeof window !== 'undefined' && 'Notification' in window) {
         requestFcmToken({
           role: 'patient',
           userId: uid,
@@ -442,21 +442,12 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }).catch(() => {});
       }
 
-      // Trigger phone vibration, audio chime, and native system notification
-      try {
-        playNotificationChime();
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-          navigator.vibrate([250, 100, 250]);
-        }
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-          if (Notification.permission === 'granted') {
-            new Notification('Dar al Dawa Medical Center 🎉', {
-              body: `Welcome ${params.fullName}! Your patient account is now active.`,
-              icon: '/favicon.ico'
-            });
-          }
-        }
-      } catch {}
+      // 2. Trigger real mobile device notification (supports Android Chrome SW + vibration + chime)
+      showDeviceNotification('Dar al Dawa Medical Center 🎉', {
+        body: `خوش آمدید ${params.fullName}! آپ کا مریض اکاؤنٹ کامیابی سے بن گیا ہے۔ Welcome! Your patient account is now active.`,
+        icon: '/favicon.ico',
+        tag: `patient-reg-${uid}`
+      }).catch(() => {});
 
       return { success: true };
     } catch (err: any) {

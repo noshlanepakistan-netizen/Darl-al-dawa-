@@ -348,11 +348,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Mobile Header Controls: Exactly 3 items in one centered row: Account -> اردو Language -> Menu */}
         <div className="flex items-center gap-1.5 min-[360px]:gap-2 lg:hidden shrink-0">
-          {/* 1. Customer / Patient Account Button (Mobile) */}
+          {/* 1. Customer / Patient Account Button (Mobile) - Prominently displays Name */}
           <button
             onClick={isAuthenticated ? onOpenPatientDashboard : onOpenPatientAuth}
             type="button"
-            className="relative flex items-center justify-center gap-1.5 h-8 min-[360px]:h-8.5 px-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs"
+            className="relative flex items-center justify-center gap-1.5 h-8 min-[360px]:h-8.5 px-2 min-[360px]:px-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 active:scale-95 transition-all shrink-0 cursor-pointer shadow-2xs max-w-[140px]"
             title={isAuthenticated ? (patient?.fullName || (isUrdu ? "مریض اکاؤنٹ" : "My Account")) : (isUrdu ? "لاگ ان / سائن اپ" : "Sign In / Register")}
             aria-label="Patient Account"
           >
@@ -361,7 +361,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="w-5 h-5 rounded-full bg-[#1E5AA8] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
                   {patient.fullName.trim().charAt(0).toUpperCase()}
                 </span>
-                <span className="font-bold text-[11px] text-slate-800 max-w-[70px] truncate hidden min-[380px]:inline">
+                <span className="font-bold text-[11px] text-slate-800 max-w-[70px] truncate inline-block">
                   {patient.fullName.trim().split(' ')[0]}
                 </span>
               </>
@@ -411,6 +411,54 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
         <div className="lg:hidden bg-white border-b border-slate-200 shadow-xl px-4 py-4 space-y-3 animate-in slide-in-from-top-4 duration-200 max-h-[85vh] overflow-y-auto">
+          {/* Prominent Patient Identity Card in Drawer when logged in */}
+          {isAuthenticated && patient && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-200 rounded-2xl p-3.5 space-y-2.5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#1E5AA8] text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                  {patient.fullName ? patient.fullName.charAt(0).toUpperCase() : 'P'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm text-slate-900 truncate flex items-center gap-1.5">
+                    <span className="truncate">{patient.fullName}</span>
+                    <span className="w-2 h-2 rounded-full bg-[#2E9E5B] shrink-0" title="Active Patient" />
+                  </div>
+                  <div className="text-xs text-slate-600 truncate font-mono">
+                    {patient.email}
+                  </div>
+                  {patient.phone && (
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      📞 {patient.phone}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    if (onOpenPatientDashboard) onOpenPatientDashboard();
+                  }}
+                  type="button"
+                  className="w-full py-2 px-2.5 rounded-xl bg-white border border-blue-200 text-[#1E5AA8] font-bold text-xs text-center shadow-2xs hover:bg-blue-50 cursor-pointer"
+                >
+                  {isUrdu ? 'میری پروفائل' : 'My Profile & Bookings'}
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onNavigateToAppointment();
+                  }}
+                  type="button"
+                  className="w-full py-2 px-2.5 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-xs text-center shadow-2xs cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <CalendarCheck className="w-3.5 h-3.5" />
+                  <span>{isUrdu ? 'اپوائنٹمنٹ بکنگ' : 'Book Appt'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <nav className="flex flex-col space-y-1">
             {allNavLinks.map((link) => (
               <a
@@ -432,27 +480,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           <div className="pt-3 border-t border-slate-100 space-y-2">
-            {/* Patient Account Action in Mobile Menu */}
-            {isAuthenticated && patient ? (
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  if (onOpenPatientDashboard) onOpenPatientDashboard();
-                }}
-                type="button"
-                className="w-full flex items-center justify-between py-2.5 px-4 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1E5AA8] font-bold text-sm shadow-xs transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  <span>{patient.fullName ? `${patient.fullName} (${isUrdu ? 'اکاؤنٹ' : 'My Account'})` : 'My Account'}</span>
-                </div>
-                {unreadCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-xs bg-red-500 text-white font-bold">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            ) : (
+            {/* Patient Account Action in Mobile Menu (When not authenticated) */}
+            {!isAuthenticated && (
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
