@@ -75,7 +75,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'appointments', label: isUrdu ? 'اپوائنٹمنٹس' : 'Appointments', icon: CalendarCheck, badge: pendingAppointmentsCount },
     { id: 'doctors', label: isUrdu ? 'ڈاکٹرز مینیجر' : 'Doctors', icon: UserCheck },
     { id: 'departments', label: isUrdu ? 'شعبہ جات' : 'Departments', icon: Building },
-    { id: 'services_packages', label: isUrdu ? 'سہولیات و پیکیجز' : 'Services & Packages', icon: Sparkles },
+    { id: 'services_packages', label: isUrdu ? 'ہسپتال سہولیات' : 'Hospital Services', icon: Sparkles },
     { id: 'patients', label: isUrdu ? 'مریضوں کا ریکارڈ' : 'Patients Registry', icon: Users },
     { id: 'lab_reports', label: isUrdu ? 'لیب رپورٹس پورٹل' : 'Lab Reports Portal', icon: FileCheck2, badge: processingReportsCount },
     { id: 'billing', label: isUrdu ? 'بلنگ و انوائسز' : 'Billing & Invoices', icon: Receipt },

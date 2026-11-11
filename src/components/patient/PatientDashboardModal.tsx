@@ -50,7 +50,7 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
   lang,
   onNavigateToBooking
 }) => {
-  const { patient, logout, myAppointments, addPatientAppointment, cancelAppointment, updateProfile } = usePatientAuth();
+  const { patient, logout, myAppointments, addPatientAppointment, cancelAppointment, updateProfile, deleteAccount } = usePatientAuth();
   const { departments, doctors, labReports, hospitalConfig, addAppointment } = useAdminData();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const isUrdu = lang === 'ur';
@@ -1428,6 +1428,39 @@ export const PatientDashboardModal: React.FC<PatientDashboardModalProps> = ({
                   </div>
                 )}
               </form>
+
+              {/* Danger Zone: Remove / Delete Patient Account */}
+              <div className="mt-8 pt-6 border-t border-red-100 bg-red-50/50 rounded-2xl p-4 sm:p-5 border">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-xs font-bold text-red-700 uppercase tracking-wider">
+                      {isUrdu ? 'مریض کا اکاؤنٹ ختم کریں' : 'Delete Patient Account'}
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1 max-w-md">
+                      {isUrdu
+                        ? 'یہاں کلک کرنے سے آپ کا مریض اکاؤنٹ کلاؤڈ ڈیٹا بیس سے مستقل طور پر ریموو کر دیا جائے گا۔'
+                        : 'Permanently remove your patient account profile from the hospital cloud database.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm(isUrdu ? 'کیا آپ واقعی اپنا مریض اکاؤنٹ مستقل ختم کرنا چاہتے ہیں؟' : 'Are you sure you want to permanently delete your patient account?')) {
+                        const res = await deleteAccount();
+                        if (res.success) {
+                          onClose();
+                        } else {
+                          alert(res.error || 'Failed to remove account.');
+                        }
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{isUrdu ? 'اکاؤنٹ مستقل ریموو کریں' : 'Delete Account Permanently'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

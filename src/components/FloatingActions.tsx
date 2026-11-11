@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { PhoneCall, ArrowUp } from 'lucide-react';
+import { PhoneCall, ArrowUp, AlertCircle } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { formatWhatsAppLink, formatTelLink, formatDisplayPhone, triggerWhatsApp } from '../utils/phoneUtils';
-
 
 // Official WhatsApp Vector Icon
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
@@ -49,11 +48,10 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({ lang }) => {
     "Hello Dar al Dawa Medical Center Lahore, I have an inquiry"
   );
 
-
   return (
     <aside
       aria-label="Floating quick actions"
-      className="fixed bottom-4 sm:bottom-6 right-3 min-[360px]:right-4 sm:right-6 rtl:right-auto rtl:left-3 min-[360px]:rtl:left-4 sm:rtl:left-6 z-50 flex flex-col items-end rtl:items-start gap-2.5 sm:gap-3 pointer-events-none select-none"
+      className="fixed bottom-4 sm:bottom-6 right-3 min-[360px]:right-4 sm:right-6 rtl:right-auto rtl:left-3 min-[360px]:rtl:left-4 sm:rtl:left-6 z-50 flex flex-col items-end rtl:items-start gap-2 sm:gap-2.5 pointer-events-none select-none"
     >
       {/* Back to top button */}
       {showBackToTop && (
@@ -68,37 +66,44 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({ lang }) => {
         </button>
       )}
 
-      {/* 24/7 Hospital Helpline Call button */}
+      {/* 1. Emergency 24/7 Button (Red) */}
       <a
         href={`tel:${emergencyPhoneRaw}`}
-        className="pointer-events-auto group relative flex items-center gap-2 p-2.5 sm:px-4 sm:py-3 rounded-full bg-[#D62828] hover:bg-[#b51f1f] text-white shadow-2xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/20"
-        title={isUrdu ? `ہسپتال کال کریں: ${emergencyPhone}` : `Call Hospital: ${emergencyPhone}`}
+        className="pointer-events-auto group relative flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-full bg-[#D62828] hover:bg-[#b51f1f] text-white shadow-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/30"
+        title={isUrdu ? `24/7 ایمرجنسی: ${emergencyPhone}` : `24/7 Emergency: ${emergencyPhone}`}
       >
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-80" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
         </span>
-        <PhoneCall className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse shrink-0" />
-        <span className="hidden sm:inline text-xs font-bold font-mono tracking-wide whitespace-nowrap">
-          {emergencyPhone}
+        <AlertCircle className="w-4 h-4 shrink-0" />
+        <span className="text-xs font-bold whitespace-nowrap">
+          {isUrdu ? 'ایمرجنسی' : 'Emergency'}
         </span>
       </a>
 
-      {/* WhatsApp Chat Floating Button (Always prominent and clearly visible on mobile) */}
+      {/* 2. Simple Call Button (Blue) */}
+      <a
+        href={`tel:${emergencyPhoneRaw}`}
+        className="pointer-events-auto group relative flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-full bg-[#1E5AA8] hover:bg-[#154685] text-white shadow-xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/30"
+        title={isUrdu ? `کال کریں: ${emergencyPhone}` : `Call: ${emergencyPhone}`}
+      >
+        <PhoneCall className="w-4 h-4 shrink-0" />
+        <span className="text-xs font-bold font-mono tracking-wide whitespace-nowrap">
+          {isUrdu ? 'کال:' : 'Call:'} {emergencyPhone}
+        </span>
+      </a>
+
+      {/* 3. WhatsApp Chat Floating Button (Green) */}
       <a
         href={whatsappHref}
         onClick={(e) => triggerWhatsApp(hospitalConfig?.contact?.whatsapp, "Hello Dar al Dawa Medical Center Lahore, I have an inquiry", e)}
         rel="noopener noreferrer"
-        className="pointer-events-auto group relative flex items-center gap-1.5 min-[360px]:gap-2 px-3 py-2.5 min-[360px]:px-3.5 min-[360px]:py-2.5 sm:px-4 sm:py-3 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-2xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/30 cursor-pointer"
+        className="pointer-events-auto group relative flex items-center gap-1.5 px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-2xl transition-all hover:scale-105 active:scale-95 whitespace-nowrap border-2 border-white/40 cursor-pointer"
         title={isUrdu ? 'واٹس ایپ پر رابطہ کریں' : 'Chat on WhatsApp'}
       >
-
-        <span className="relative flex h-2 w-2 shrink-0">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-85" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
-        </span>
         <WhatsAppIcon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 fill-white" />
-        <span className="text-[11.5px] min-[360px]:text-xs font-extrabold tracking-wide whitespace-nowrap pr-0.5">
+        <span className="text-xs font-extrabold tracking-wide whitespace-nowrap">
           {isUrdu ? 'واٹس ایپ' : 'WhatsApp'}
         </span>
       </a>

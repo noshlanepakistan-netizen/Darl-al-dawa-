@@ -1,5 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarCheck, PhoneCall, ShieldCheck, Clock, Users, Award, CheckCircle2, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  CalendarCheck,
+  PhoneCall,
+  ShieldCheck,
+  Clock,
+  Users,
+  Award,
+  CheckCircle2,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Check,
+  MessageSquare,
+  Calendar,
+  User,
+  Stethoscope,
+  AlertCircle
+} from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
 import { usePatientAuth } from '../context/PatientAuthContext';
@@ -8,20 +26,25 @@ import { playNotificationChime } from '../utils/audioChime';
 
 interface HeroProps {
   lang: 'en' | 'ur';
-  onQuickBook: (name: string, phone: string, deptId: string, date: string) => void;
-  onNavigateToAppointment: () => void;
+  onQuickBook?: (name: string, phone: string, deptId: string, date: string) => void;
+  onNavigateToAppointment?: () => void;
+  preselectedDeptId?: string;
+  preselectedDoctorId?: string;
 }
 
 export const Hero: React.FC<HeroProps> = ({
   lang,
   onQuickBook,
-  onNavigateToAppointment
+  onNavigateToAppointment,
+  preselectedDeptId,
+  preselectedDoctorId
 }) => {
   const t = UI_TRANSLATIONS[lang].hero;
   const isUrdu = lang === 'ur';
-  const { homepageSettings, hospitalConfig, departments: liveDepts, addAppointment, showToast } = useAdminData();
+  const { homepageSettings, hospitalConfig, departments: liveDepts, doctors: liveDoctors, addAppointment, showToast } = useAdminData();
   const { patient, addPatientAppointment } = usePatientAuth();
   const deptsList = liveDepts || [];
+  const doctorsList = liveDoctors || [];
 
   const heroHeading = homepageSettings?.heroHeading || (isUrdu ? 'دار الدواء میڈیکل سنٹر' : 'Caring for You, Every Step of the Way');
   const heroSubtitle = homepageSettings?.heroSubheading || t.subtitle;
@@ -45,39 +68,92 @@ export const Hero: React.FC<HeroProps> = ({
   }, [sliderImages.length]);
 
   // Quick form state
-  const [quickName, setQuickName] = useState('');
-  const [quickPhone, setQuickPhone] = useState('');
-  const [quickDept, setQuickDept] = useState(liveDepts?.[0]?.id || 'cardiology');
+  const [quickName, setQuickName] = useState(patient?.fullName || '');
+  const [quickPhone, setQuickPhone] = useState(patient?.phone || '');
+  const [quickDept, setQuickDept] = useState(preselectedDeptId || liveDepts?.[0]?.id || 'cardiology');
+  const [quickDoctor, setQuickDoctor] = useState(preselectedDoctorId || '');
   const [quickDate, setQuickDate] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow.toISOString().split('T')[0];
   });
+  const [quickSlot, setQuickSlot] = useState<'morning' | 'afternoon' | 'evening'>('morning');
+  const [quickSymptoms, setQuickSymptoms] = useState('');
+  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
+
+  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [bookedDetails, setBookedDetails] = useState<{
+    token: string;
+    name: string;
+    phone: string;
+    deptTitle: string;
+    doctorName: string;
+    date: string;
+    slot: string;
+  } | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
+
+  // Sync preselected department and doctor from external clicks (e.g. from Doctors or Departments section)
+  useEffect(() => {
+    if (preselectedDeptId) setQuickDept(preselectedDeptId);
+    if (preselectedDoctorId) setQuickDoctor(preselectedDoctorId);
+  }, [preselectedDeptId, preselectedDoctorId]);
 
   useEffect(() => {
     if (liveDepts && liveDepts.length > 0 && (!quickDept || quickDept === 'cardiology')) {
       setQuickDept(liveDepts[0].id);
     }
   }, [liveDepts]);
-  const [formSubmitted, setFormSubmitted] = useState(false);
-  const [quickToken, setQuickToken] = useState('');
+
+  // Filter available doctors by chosen department
+  const filteredDoctors = doctorsList.filter(
+    (d) => !quickDept || d.departmentId === quickDept
+  );
+
+  const handleCopyToken = (token: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(token);
+      setCopiedToken(true);
+      setTimeout(() => setCopiedToken(false), 2500);
+    }
+  };
 
   const handleQuickSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickName.trim() || !quickPhone.trim()) return;
+
+    const newErrors: { name?: string; phone?: string } = {};
+    if (!quickName.trim()) {
+      newErrors.name = isUrdu ? 'براہ کرم مریض کا نام درج کریں۔' : 'Please enter patient full name.';
+    }
+    const cleanDigits = quickPhone.replace(/\D/g, '');
+    if (!quickPhone.trim() || cleanDigits.length < 10) {
+      newErrors.phone = isUrdu ? 'درست موبائل نمبر درج کریں (مثلاً 03001234567)' : 'Please enter a valid mobile number.';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      try {
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          navigator.vibrate([100, 50, 100]);
+        }
+      } catch {}
+      return;
+    }
+
+    setErrors({});
 
     const token = `DAD-${Math.floor(100000 + Math.random() * 900000)}`;
-    setQuickToken(token);
 
-    const digits = quickPhone.replace(/\D/g, '');
     let finalPhone = quickPhone.trim();
-    if (digits.length === 10 && digits.startsWith('3')) {
-      finalPhone = '0' + digits;
-    } else if (digits.length === 12 && digits.startsWith('923')) {
-      finalPhone = '0' + digits.slice(2);
+    if (cleanDigits.length === 10 && cleanDigits.startsWith('3')) {
+      finalPhone = '0' + cleanDigits;
+    } else if (cleanDigits.length === 12 && cleanDigits.startsWith('923')) {
+      finalPhone = '0' + cleanDigits.slice(2);
     }
 
     const finalDate = quickDate || new Date().toISOString().split('T')[0];
+    const deptObj = liveDepts?.find((d) => d.id === quickDept);
+    const docObj = doctorsList.find((d) => d.id === quickDoctor);
 
     const appointmentPayload = {
       token,
@@ -85,18 +161,18 @@ export const Hero: React.FC<HeroProps> = ({
       patientName: quickName.trim(),
       phone: finalPhone,
       departmentId: quickDept || 'cardiology',
-      doctorId: '',
+      doctorId: quickDoctor || '',
       appointmentDate: finalDate,
-      timeSlot: 'morning',
+      timeSlot: quickSlot,
       patientType: 'new' as const,
-      notes: '(Quick Hero Booking)',
+      notes: quickSymptoms ? `(Quick OPD) ${quickSymptoms.trim()}` : '(Quick OPD Booking)',
       status: 'pending' as const
     };
 
     // 1. Save to master Admin & Firestore database
     addAppointment(appointmentPayload);
 
-    // 2. Save directly to Patient Appointments state
+    // 2. Save directly to Patient Appointments state & local storage
     if (addPatientAppointment) {
       addPatientAppointment({
         id: `app-${Date.now()}`,
@@ -104,6 +180,14 @@ export const Hero: React.FC<HeroProps> = ({
         createdAt: new Date().toISOString()
       });
     }
+
+    try {
+      const existingTokens: string[] = JSON.parse(localStorage.getItem('dad_booked_tokens') || '[]');
+      if (!existingTokens.includes(token)) {
+        existingTokens.push(token);
+        localStorage.setItem('dad_booked_tokens', JSON.stringify(existingTokens));
+      }
+    } catch {}
 
     // 3. Audio & Haptic Feedback on User's Phone
     try {
@@ -116,15 +200,26 @@ export const Hero: React.FC<HeroProps> = ({
     if (showToast) {
       showToast(
         isUrdu
-          ? `ٹوکن ${token} کے ساتھ اپوائنٹمنٹ کامیابی سے درج ہو گئی ہے!`
-          : `Appointment booked successfully! Token: ${token}`,
+          ? `ٹوکن #${token} کے ساتھ آپ کی اپوائنٹمنٹ درج ہو گئی ہے!`
+          : `Appointment booked successfully! Token #${token}`,
         'success'
       );
     }
 
-    onQuickBook(quickName, quickPhone, quickDept, finalDate);
+    setBookedDetails({
+      token,
+      name: quickName.trim(),
+      phone: finalPhone,
+      deptTitle: isUrdu ? deptObj?.titleUrdu || quickDept : deptObj?.title || quickDept,
+      doctorName: docObj ? (isUrdu ? docObj.nameUrdu : docObj.name) : (isUrdu ? 'ماہر کنسلٹنٹ ڈاکٹر' : 'Specialist Consultant Doctor'),
+      date: finalDate,
+      slot: quickSlot
+    });
+
+    if (onQuickBook) {
+      onQuickBook(quickName, quickPhone, quickDept, finalDate);
+    }
     setFormSubmitted(true);
-    setTimeout(() => setFormSubmitted(false), 5000);
   };
 
   return (
@@ -234,27 +329,64 @@ export const Hero: React.FC<HeroProps> = ({
               {heroSubtitle}
             </p>
 
-            {/* Primary Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            {/* Primary Action Buttons: Book, Simple Call, Emergency 24/7, WhatsApp */}
+            <div className="flex flex-wrap gap-2.5 sm:gap-3 pt-2">
+              {/* 1. Book Appointment CTA */}
               <button
                 onClick={onNavigateToAppointment}
                 type="button"
-                className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
               >
                 <CalendarCheck className="w-4 h-4" />
                 <span className={isUrdu ? 'font-urdu' : ''}>{heroBtnText}</span>
               </button>
 
+              {/* 2. Simple Blue Call Button */}
               <a
                 href={formatTelLink(hospitalConfig.contact.emergencyNumber)}
-                className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-[#D62828] hover:bg-[#b71f1f] text-white font-bold text-base shadow-md hover:shadow-lg transition-all active:scale-95"
+                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#1E5AA8] hover:bg-[#154685] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95"
+                title={isUrdu ? `کال کریں: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}` : `Call: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}`}
               >
-                <PhoneCall className="w-5 h-5 animate-bounce" />
-                <span className={isUrdu ? 'font-urdu' : ''}>
-                  {isUrdu ? `ایمرجنسی: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}` : `Emergency: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}`}
+                <PhoneCall className="w-4 h-4 text-white" />
+                <span className="font-bold">
+                  {isUrdu ? `کال: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}` : `Call: ${formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}`}
                 </span>
               </a>
 
+              {/* 3. Emergency 24/7 Button (Red) */}
+              <a
+                href={formatTelLink(hospitalConfig.contact.emergencyNumber)}
+                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#D62828] hover:bg-[#b71f1f] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95"
+                title={isUrdu ? '24/7 ایمرجنسی ہاٹ لائن' : '24/7 Emergency Hotline'}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-80" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                </span>
+                <AlertCircle className="w-4 h-4 text-white" />
+                <span>{isUrdu ? 'ایمرجنسی 24/7' : 'Emergency 24/7'}</span>
+              </a>
+
+              {/* 4. WhatsApp Button (Green) */}
+              <a
+                href={formatWhatsAppLink(
+                  hospitalConfig?.contact?.whatsapp,
+                  isUrdu ? 'اسلام علیکم، مجھے فوری رہنمائی چاہیے' : 'Hello Dar al Dawa Medical Center, I would like to inquire about...'
+                )}
+                onClick={(e) =>
+                  triggerWhatsApp(
+                    hospitalConfig?.contact?.whatsapp,
+                    isUrdu ? 'اسلام علیکم، مجھے فوری رہنمائی چاہیے' : 'Hello Dar al Dawa Medical Center, I would like to inquire about...',
+                    e
+                  )
+                }
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+                title={isUrdu ? 'واٹس ایپ پر رابطہ کریں' : 'Chat on WhatsApp'}
+              >
+                <MessageSquare className="w-4 h-4 text-white" />
+                <span>{isUrdu ? 'واٹس ایپ' : 'WhatsApp'}</span>
+              </a>
             </div>
 
             {/* Key Quality Assurances */}
@@ -275,16 +407,20 @@ export const Hero: React.FC<HeroProps> = ({
           </div>
 
           {/* Right Column: Quick Appointment Booking Card with Visual Accent */}
-          <div className="lg:col-span-5">
-            <div className="relative">
+          <div className="lg:col-span-5" id="appointment">
+            <div className="relative" id="quick-appointment">
               {/* Glow backdrop */}
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-3xl blur-sm opacity-20"></div>
 
               {/* Form Card */}
-              <div className="relative bg-white rounded-2xl p-6 sm:p-7 shadow-xl border border-slate-100">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+              <div className="relative bg-white rounded-2xl p-5 sm:p-7 shadow-xl border border-slate-100">
+                <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-4">
                   <div>
-                    <h3 className={`text-xl font-bold text-slate-900 ${isUrdu ? 'font-urdu text-xl' : 'font-heading'}`}>
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 uppercase tracking-wide">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{isUrdu ? 'فوری او پی ڈی بکنگ' : 'Instant OPD Booking'}</span>
+                    </div>
+                    <h3 className={`text-xl font-bold text-slate-900 mt-0.5 ${isUrdu ? 'font-urdu text-xl' : 'font-heading'}`}>
                       {isUrdu ? (
                         <span>فوری <span className="text-[#2E9E5B]">اپوائنٹمنٹ</span></span>
                       ) : (
@@ -295,56 +431,157 @@ export const Hero: React.FC<HeroProps> = ({
                       {t.quickBookingSub}
                     </p>
                   </div>
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-[#2E9E5B] flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-[#2E9E5B] flex items-center justify-center flex-shrink-0 shadow-2xs border border-emerald-100">
+                    <CalendarCheck className="w-5 h-5" />
                   </div>
                 </div>
 
-                {formSubmitted ? (
-                  <div className="p-5 rounded-xl bg-emerald-50 border border-emerald-200 text-center space-y-2 animate-in fade-in">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
-                    <p className={`font-semibold text-emerald-900 ${isUrdu ? 'font-urdu' : ''}`}>
-                      {t.quickSuccess}
-                    </p>
-                    {quickToken && (
-                      <p className="font-mono font-bold text-xs text-[#1E5AA8] bg-white px-2.5 py-1 rounded-md border border-blue-200 inline-block">
-                        Token: {quickToken}
+                {formSubmitted && bookedDetails ? (
+                  <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-center space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-xs">
+                        <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+                      </div>
+                      <h4 className={`text-base font-bold text-emerald-900 ${isUrdu ? 'font-urdu text-lg' : ''}`}>
+                        {isUrdu ? 'اپوائنٹمنٹ کی درخواست کامیابی سے درج ہو گئی ہے!' : 'Appointment Successfully Booked!'}
+                      </h4>
+                      <p className="text-xs text-emerald-800">
+                        {isUrdu
+                          ? 'ہسپتال عملہ جلد آپ سے تصدیق کے لیے رابطہ کرے گا۔ برائے مہربانی اپنا ٹوکن محفوظ رکھیں۔'
+                          : 'Our hospital reception team will confirm your consultation shortly. Please save your token.'}
                       </p>
-                    )}
-                    <p className="text-xs text-emerald-700">
-                      {isUrdu ? 'اپوائنٹمنٹ درج ہو گئی ہے۔ آپ کو تصدیق پر منتقل کیا جا رہا ہے...' : 'Appointment registered! Showing details below...'}
-                    </p>
+
+                      {/* Token Box */}
+                      <div className="pt-2">
+                        <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-xl border border-emerald-300 shadow-2xs">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase">{isUrdu ? 'ٹوکن:' : 'Token:'}</span>
+                          <span className="font-mono font-bold text-sm text-[#1E5AA8]">#{bookedDetails.token}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyToken(bookedDetails.token)}
+                            className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                            title="Copy Token"
+                          >
+                            {copiedToken ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Booking Summary Card */}
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/80">
+                        <span className="text-slate-500">{isUrdu ? 'مریض کا نام' : 'Patient Name'}:</span>
+                        <span className="font-bold text-slate-900">{bookedDetails.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/80">
+                        <span className="text-slate-500">{isUrdu ? 'شعبہ' : 'Department'}:</span>
+                        <span className="font-semibold text-slate-800">{bookedDetails.deptTitle}</span>
+                      </div>
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/80">
+                        <span className="text-slate-500">{isUrdu ? 'کنسلٹنٹ ڈاکٹر' : 'Doctor'}:</span>
+                        <span className="font-semibold text-[#1E5AA8]">{bookedDetails.doctorName}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">{isUrdu ? 'تاریخ و شفٹ' : 'Date & Slot'}:</span>
+                        <span className="font-medium text-slate-800 capitalize">
+                          {bookedDetails.date} ({bookedDetails.slot})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons: WhatsApp & Reset */}
+                    <div className="space-y-2 pt-1">
+                      <a
+                        href={formatWhatsAppLink(
+                          hospitalConfig.contact.whatsapp,
+                          `Hello Dar al Dawa, I booked quick appointment token #${bookedDetails.token} for ${bookedDetails.name} scheduled on ${bookedDetails.date} (${bookedDetails.slot} slot) with ${bookedDetails.doctorName}.`
+                        )}
+                        onClick={(e) =>
+                          triggerWhatsApp(
+                            hospitalConfig.contact.whatsapp,
+                            `Hello Dar al Dawa, I booked quick appointment token #${bookedDetails.token} for ${bookedDetails.name} scheduled on ${bookedDetails.date} (${bookedDetails.slot} slot) with ${bookedDetails.doctorName}.`,
+                            e
+                          )
+                        }
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        <span>{isUrdu ? 'واٹس ایپ پر فوری تصدیق حاصل کریں' : 'Chat on WhatsApp with Token'}</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormSubmitted(false);
+                          setBookedDetails(null);
+                          setQuickName('');
+                          setQuickPhone('');
+                          setQuickSymptoms('');
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-200 transition-colors cursor-pointer text-center"
+                      >
+                        {isUrdu ? 'دوسری اپوائنٹمنٹ بک کریں' : 'Book Another Appointment'}
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <form onSubmit={handleQuickSubmit} noValidate className="space-y-4">
+                  <form onSubmit={handleQuickSubmit} noValidate className="space-y-3.5">
+                    {/* Error Banner if any */}
+                    {(errors.name || errors.phone) && (
+                      <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                        {errors.name || errors.phone}
+                      </div>
+                    )}
+
+                    {/* Patient Name */}
                     <div>
                       <label className={`block text-xs font-semibold text-slate-700 mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
-                        {t.fullName}
+                        {isUrdu ? 'مریض کا پورا نام *' : 'Patient Full Name *'}
                       </label>
-                      <input
-                        type="text"
-                        required
-                        value={quickName}
-                        onChange={(e) => setQuickName(e.target.value)}
-                        placeholder={isUrdu ? "مثلاً محمد احمد" : "e.g. Muhammad Ahmed"}
-                        className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-sm transition-all bg-slate-50/50"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          value={quickName}
+                          onChange={(e) => {
+                            setQuickName(e.target.value);
+                            if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+                          }}
+                          placeholder={isUrdu ? "مثلاً محمد احمد" : "e.g. Muhammad Ahmed"}
+                          className={`w-full pl-3.5 pr-9 py-2.5 rounded-xl border outline-none text-sm transition-all bg-slate-50/50 ${
+                            errors.name ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100'
+                          }`}
+                        />
+                        <User className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+                      </div>
                     </div>
 
+                    {/* Mobile Number */}
                     <div>
                       <label className={`block text-xs font-semibold text-slate-700 mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
-                        {t.phoneNumber}
+                        {isUrdu ? 'موبائل نمبر (واٹس ایپ) *' : 'WhatsApp / Mobile Number *'}
                       </label>
-                      <input
-                        type="tel"
-                        required
-                        value={quickPhone}
-                        onChange={(e) => setQuickPhone(e.target.value)}
-                        placeholder="0300-1234567"
-                        className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-sm font-mono transition-all bg-slate-50/50"
-                      />
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          required
+                          value={quickPhone}
+                          onChange={(e) => {
+                            setQuickPhone(e.target.value);
+                            if (errors.phone) setErrors((prev) => ({ ...prev, phone: undefined }));
+                          }}
+                          placeholder="0300-1234567"
+                          className={`w-full pl-3.5 pr-9 py-2.5 rounded-xl border outline-none text-sm font-mono transition-all bg-slate-50/50 ${
+                            errors.phone ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100'
+                          }`}
+                        />
+                        <PhoneCall className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+                      </div>
                     </div>
 
+                    {/* Department & Doctor Row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className={`block text-xs font-semibold text-slate-700 mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
@@ -352,8 +589,11 @@ export const Hero: React.FC<HeroProps> = ({
                         </label>
                         <select
                           value={quickDept}
-                          onChange={(e) => setQuickDept(e.target.value)}
-                          className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm bg-slate-50/50"
+                          onChange={(e) => {
+                            setQuickDept(e.target.value);
+                            setQuickDoctor('');
+                          }}
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm bg-slate-50/50 cursor-pointer"
                         >
                           {deptsList.map((dept) => (
                             <option key={dept.id} value={dept.id}>
@@ -365,24 +605,87 @@ export const Hero: React.FC<HeroProps> = ({
 
                       <div>
                         <label className={`block text-xs font-semibold text-slate-700 mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
+                          {isUrdu ? 'کنسلٹنٹ ڈاکٹر' : 'Doctor / Specialist'}
+                        </label>
+                        <select
+                          value={quickDoctor}
+                          onChange={(e) => setQuickDoctor(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm bg-slate-50/50 cursor-pointer"
+                        >
+                          <option value="">
+                            {isUrdu ? 'کوئی بھی دستیاب ماہر ڈاکٹر' : 'Any Available Specialist'}
+                          </option>
+                          {filteredDoctors.map((doc) => (
+                            <option key={doc.id} value={doc.id}>
+                              {isUrdu ? doc.nameUrdu : doc.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Date & Time Slot Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs font-semibold text-slate-700 mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
                           {t.preferredDate}
                         </label>
                         <input
                           type="date"
                           required
                           value={quickDate}
+                          min={new Date().toISOString().split('T')[0]}
                           onChange={(e) => setQuickDate(e.target.value)}
-                          className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm bg-slate-50/50"
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-[#1E5AA8] focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm bg-slate-50/50 cursor-pointer"
                         />
                       </div>
+
+                      <div>
+                        <label className={`block text-xs font-semibold text-slate-700 mb-1 ${isUrdu ? 'font-urdu' : ''}`}>
+                          {isUrdu ? 'وقت / شفٹ' : 'Time Shift'}
+                        </label>
+                        <div className="grid grid-cols-3 gap-1 pt-0.5">
+                          {[
+                            { id: 'morning', label: isUrdu ? 'صبح' : 'Morn', time: '9AM-12PM' },
+                            { id: 'afternoon', label: isUrdu ? 'دوپہر' : 'Aft', time: '1PM-4PM' },
+                            { id: 'evening', label: isUrdu ? 'شام' : 'Eve', time: '5PM-9PM' }
+                          ].map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => setQuickSlot(s.id as any)}
+                              className={`py-2 px-1 text-center rounded-xl border text-[11px] font-semibold transition-all cursor-pointer ${
+                                quickSlot === s.id
+                                  ? 'bg-[#1E5AA8] text-white border-[#1E5AA8] shadow-2xs font-bold'
+                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              <div>{s.label}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Optional Symptoms / Reason for Visit */}
+                    <div>
+                      <input
+                        type="text"
+                        value={quickSymptoms}
+                        onChange={(e) => setQuickSymptoms(e.target.value)}
+                        placeholder={isUrdu ? "مختصر علامات (اختیاری): مثلاً سر درد، شوگر چیک اپ..." : "Brief reason / symptoms (optional): e.g. chest pain, checkup..."}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#1E5AA8] focus:ring-1 focus:ring-blue-100 outline-none text-xs bg-slate-50/50 placeholder:text-slate-400"
+                      />
                     </div>
 
                     <button
                       type="submit"
-                      className="w-full mt-2 py-3 px-4 rounded-xl bg-[#1E5AA8] hover:bg-[#164785] text-white font-semibold text-sm shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full mt-1 py-3 px-4 rounded-xl bg-[#2E9E5B] hover:bg-[#25824b] text-white font-bold text-sm shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <span className={isUrdu ? 'font-urdu' : ''}>{t.submitQuick}</span>
-                      <ArrowRight className={`w-4 h-4 ${isUrdu ? 'rotate-180' : ''}`} />
+                      <CalendarCheck className="w-4 h-4" />
+                      <span className={isUrdu ? 'font-urdu' : ''}>
+                        {isUrdu ? 'فوری اپوائنٹمنٹ بک کریں' : 'Confirm & Book Appointment'}
+                      </span>
                     </button>
                   </form>
                 )}

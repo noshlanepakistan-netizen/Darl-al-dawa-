@@ -7,13 +7,9 @@ import React, { useState, useEffect } from 'react';
 import { HeaderTopBar } from './components/HeaderTopBar';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { AppointmentSection } from './components/AppointmentSection';
 import { Departments } from './components/Departments';
-import { Doctors } from './components/Doctors';
 import { ServicesFacilities } from './components/ServicesFacilities';
 import { AboutUs } from './components/AboutUs';
-import { HealthPackages } from './components/HealthPackages';
-import { Testimonials } from './components/Testimonials';
 import { GallerySection } from './components/GallerySection';
 import { BlogSection } from './components/BlogSection';
 import { FaqSection } from './components/FaqSection';
@@ -61,11 +57,11 @@ export default function App() {
     hero: true,
     appointment: true,
     departments: true,
-    doctors: true,
+    doctors: false,
     services: true,
-    packages: true,
+    packages: false,
     about: true,
-    testimonials: true,
+    testimonials: false,
     gallery: true,
     blog: true,
     faq: true,
@@ -75,9 +71,6 @@ export default function App() {
   // Appointment preselection states
   const [selectedDeptId, setSelectedDeptId] = useState<string | undefined>(undefined);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | undefined>(undefined);
-  const [prefillName, setPrefillName] = useState<string>('');
-  const [prefillPhone, setPrefillPhone] = useState<string>('');
-  const [prefillDate, setPrefillDate] = useState<string>('');
 
   // Handle URL hash / path / search changes for admin route protection
   useEffect(() => {
@@ -146,23 +139,15 @@ export default function App() {
     if (viewMode !== 'website') {
       handleGoHome();
       setTimeout(() => {
-        const el = document.getElementById('appointment');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        const el = document.getElementById('quick-appointment') || document.getElementById('appointment') || document.getElementById('home');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 100);
       return;
     }
-    const el = document.getElementById('appointment');
+    const el = document.getElementById('quick-appointment') || document.getElementById('appointment') || document.getElementById('home');
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  };
-
-  const handleQuickBook = (name: string, phone: string, deptId: string, date: string) => {
-    setPrefillName(name);
-    setPrefillPhone(phone);
-    setSelectedDeptId(deptId);
-    setPrefillDate(date);
-    scrollToAppointment();
   };
 
   const handleSelectDepartment = (deptId: string) => {
@@ -302,8 +287,6 @@ export default function App() {
         lang={lang}
         onOpenReportsModal={() => setIsReportModalOpen(true)}
         onGoToAdmin={handleOpenAdmin}
-        onOpenPatientAuth={() => setIsPatientAuthOpen(true)}
-        onOpenPatientDashboard={() => setIsPatientDashboardOpen(true)}
       />
       <Navbar
         lang={lang}
@@ -311,45 +294,24 @@ export default function App() {
         onNavigateToAppointment={scrollToAppointment}
         onOpenReportsModal={() => setIsReportModalOpen(true)}
         onGoToAdmin={handleOpenAdmin}
-        onOpenPatientAuth={() => setIsPatientAuthOpen(true)}
-        onOpenPatientDashboard={() => setIsPatientDashboardOpen(true)}
       />
 
       <main>
-        {/* 2. Hero Section */}
+        {/* 2. Hero & Quick Appointment Section */}
         {secVis.hero && (
           <Hero
             lang={lang}
-            onQuickBook={handleQuickBook}
+            preselectedDeptId={selectedDeptId}
+            preselectedDoctorId={selectedDoctorId}
             onNavigateToAppointment={scrollToAppointment}
           />
         )}
 
-        {/* 3. Appointment Booking Form (Moved right after Hero) */}
-        {secVis.appointment && (
-          <AppointmentSection
-            lang={lang}
-            preselectedDeptId={selectedDeptId}
-            preselectedDoctorId={selectedDoctorId}
-            prefillName={prefillName}
-            prefillPhone={prefillPhone}
-            prefillDate={prefillDate}
-          />
-        )}
-
-        {/* 4. Departments Section (Moved right after Appointment) */}
+        {/* 4. Departments & Specialist Doctors Section */}
         {secVis.departments && (
           <Departments
             lang={lang}
             onSelectDepartment={handleSelectDepartment}
-            onSelectDoctor={handleSelectDoctor}
-          />
-        )}
-
-        {/* 5. Doctor Profiles Section (Moved right after Departments) */}
-        {secVis.doctors && (
-          <Doctors
-            lang={lang}
             onSelectDoctor={handleSelectDoctor}
           />
         )}
@@ -366,18 +328,7 @@ export default function App() {
         {/* 6b. About Us Section & Accreditations */}
         {secVis.about && <AboutUs lang={lang} />}
 
-        {/* 6c. Health Packages & Lab Pricing in PKR */}
-        {secVis.packages && (
-          <HealthPackages
-            lang={lang}
-            onBookPackage={handleBookPackage}
-          />
-        )}
-
-        {/* 6d. Patient Testimonials Carousel */}
-        {secVis.testimonials && <Testimonials lang={lang} />}
-
-        {/* 6e. Hospital Photo Gallery & Lightbox */}
+        {/* 6c. Hospital Photo Gallery & Lightbox */}
         {secVis.gallery && <GallerySection lang={lang} />}
 
         {/* 6f. Public Health Tips & Medical Blog */}

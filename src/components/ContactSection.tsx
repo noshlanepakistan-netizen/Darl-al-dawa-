@@ -95,9 +95,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang }) => {
             </div>
             <a
               href={formatTelLink(hospitalConfig.contact.emergencyNumber)}
-              className="font-mono text-base font-extrabold text-[#D62828] hover:underline"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1E5AA8] hover:bg-[#154685] text-white font-mono text-sm font-bold shadow-xs transition-colors w-fit"
             >
-              {formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}
+              <Phone className="w-4 h-4 text-white" />
+              <span>{isUrdu ? 'کال:' : 'Call:'} {formatDisplayPhone(hospitalConfig.contact.emergencyNumber)}</span>
             </a>
           </div>
 

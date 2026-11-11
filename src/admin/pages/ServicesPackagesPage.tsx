@@ -23,7 +23,7 @@ export const ServicesPackagesPage: React.FC<ServicesPackagesPageProps> = ({ lang
   const { packages, addPackage, updatePackage, deletePackage, services } = useAdminData();
   const isUrdu = lang === 'ur';
 
-  const [activeTab, setActiveTab] = useState<'packages' | 'services'>('packages');
+  const [activeTab, setActiveTab] = useState<'services' | 'packages'>('services');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HealthPackage | null>(null);

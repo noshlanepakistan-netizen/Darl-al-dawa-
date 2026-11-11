@@ -119,10 +119,8 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate }) => {
               {[
                 { id: 'home', label: 'Home / صفحہ اول' },
                 { id: 'about', label: 'About Us / ہمارے متعلق' },
-                { id: 'departments', label: 'Departments / شعبہ جات' },
-                { id: 'doctors', label: 'Our Doctors / ڈاکٹرز' },
+                { id: 'departments', label: 'Departments & Doctors / شعبہ جات و ڈاکٹرز' },
                 { id: 'services', label: 'Services / سہولیات' },
-                { id: 'packages', label: 'Lab Packages / پیکیجز' },
                 { id: 'appointment', label: 'Book Appointment / وقت لیں' },
                 { id: 'gallery', label: 'Gallery / تصاویر' },
                 { id: 'faq', label: 'FAQs / سوالات' }

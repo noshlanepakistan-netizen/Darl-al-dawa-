@@ -85,11 +85,11 @@ export const INITIAL_HOMEPAGE_SETTINGS: HomepageSettings = {
     hero: true,
     appointment: true,
     departments: true,
-    doctors: true,
+    doctors: false,
     services: true,
-    packages: true,
+    packages: false,
     about: true,
-    testimonials: true,
+    testimonials: false,
     gallery: true,
     blog: true,
     faq: true,
@@ -252,8 +252,18 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [appointments, setAppointments] = useState<AdminAppointment[]>(() => loadSaved('appointments', INITIAL_APPOINTMENTS));
   const [doctors, setDoctors] = useState<Doctor[]>(() => loadSaved('doctors', INITIAL_DOCTORS));
   const [departments, setDepartments] = useState<Department[]>(() => loadSaved('departments', INITIAL_DEPARTMENTS));
-  const [packages, setPackages] = useState<HealthPackage[]>(() => loadSaved('packages', INITIAL_PACKAGES));
-  const [services, setServices] = useState<ServiceFacility[]>(() => loadSaved('services', INITIAL_SERVICES));
+  const [packages, setPackages] = useState<HealthPackage[]>(() => loadSaved('packages', []));
+  const [services, setServices] = useState<ServiceFacility[]>(() => {
+    const raw: ServiceFacility[] = loadSaved('services', INITIAL_SERVICES);
+    return raw.filter(
+      (s) =>
+        s.id !== 'icu' &&
+        s.id !== 'imaging' &&
+        !s.title?.toLowerCase().includes('intensive care') &&
+        !s.title?.toLowerCase().includes('128-slice') &&
+        !s.title?.toLowerCase().includes('ct scan')
+    );
+  });
   const [gallery, setGallery] = useState<GalleryItem[]>(() => loadSaved('gallery', INITIAL_GALLERY));
   const [testimonials, setTestimonials] = useState<Testimonial[]>(() => loadSaved('testimonials', INITIAL_TESTIMONIALS));
   const [faqs, setFaqs] = useState<FAQItem[]>(() => loadSaved('faqs', INITIAL_FAQS));
@@ -549,8 +559,16 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 image: data.image
               });
             });
-            setServices(list);
-            persistSaved('services', list);
+            const filteredList = list.filter(
+              (s) =>
+                s.id !== 'icu' &&
+                s.id !== 'imaging' &&
+                !s.title?.toLowerCase().includes('intensive care') &&
+                !s.title?.toLowerCase().includes('128-slice') &&
+                !s.title?.toLowerCase().includes('ct scan')
+            );
+            setServices(filteredList);
+            persistSaved('services', filteredList);
             setCloudSyncStatus('active');
           }
         },
@@ -1710,7 +1728,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const depts = departments.length > 0 ? departments : INITIAL_DEPARTMENTS;
       const docs = doctors.length > 0 ? doctors : INITIAL_DOCTORS;
       const srvs = services.length > 0 ? services : INITIAL_SERVICES;
-      const pkgs = packages.length > 0 ? packages : INITIAL_PACKAGES;
+      const pkgs = packages.length > 0 ? packages : [];
       const gals = gallery.length > 0 ? gallery : INITIAL_GALLERY;
       const tests = testimonials.length > 0 ? testimonials : INITIAL_TESTIMONIALS;
       const fqs = faqs.length > 0 ? faqs : INITIAL_FAQS;

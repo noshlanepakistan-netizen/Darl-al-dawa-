@@ -18,7 +18,8 @@ import {
   where,
   orderBy,
   onSnapshot,
-  addDoc
+  addDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { PatientProfile, PatientAppointment } from '../types/patient';
 import { auth, db, isFirebaseConfigured } from '../firebase/config';
@@ -59,6 +60,7 @@ interface PatientAuthContextType {
   addPatientAppointment: (appointment: PatientAppointment) => void;
   cancelAppointment: (id: string) => Promise<{ success: boolean; error?: string }>;
   refreshAppointments: () => Promise<void>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const PatientAuthContext = createContext<PatientAuthContextType | undefined>(undefined);
@@ -569,6 +571,31 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setMyAppointments([]);
   };
 
+  // Delete / Remove Patient Account permanently
+  const deleteAccount = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const activeId = patient?.id || auth.currentUser?.uid;
+      if (activeId) {
+        try {
+          await deleteDoc(doc(db, 'patients', activeId));
+        } catch (e) {
+          console.warn('Error deleting patient doc from Firestore:', e);
+        }
+      }
+      try {
+        if (auth.currentUser) {
+          await auth.currentUser.delete();
+        }
+      } catch (e) {
+        console.warn('Error deleting firebase auth user:', e);
+      }
+      await logout();
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to remove account.' };
+    }
+  };
+
   // Forgot password
   const forgotPassword = async (email: string): Promise<{ success: boolean; message: string }> => {
     try {
@@ -700,7 +727,8 @@ export const PatientAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
         myAppointments,
         addPatientAppointment,
         cancelAppointment,
-        refreshAppointments
+        refreshAppointments,
+        deleteAccount
       }}
     >
       {children}

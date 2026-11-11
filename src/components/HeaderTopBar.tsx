@@ -1,9 +1,7 @@
 import React from 'react';
-import { Clock, Mail, MessageSquare, AlertCircle, MapPin, User, Bell } from 'lucide-react';
+import { Clock, Mail, MessageSquare, PhoneCall, AlertCircle, MapPin } from 'lucide-react';
 import { UI_TRANSLATIONS } from '../data/hospitalData';
 import { useAdminData } from '../admin/context/AdminDataContext';
-import { usePatientAuth } from '../context/PatientAuthContext';
-import { useNotifications } from '../context/NotificationContext';
 import { formatWhatsAppLink, formatTelLink, formatDisplayPhone, triggerWhatsApp } from '../utils/phoneUtils';
 
 interface HeaderTopBarProps {
@@ -17,13 +15,9 @@ interface HeaderTopBarProps {
 export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({
   lang,
   onOpenReportsModal,
-  onGoToAdmin,
-  onOpenPatientAuth,
-  onOpenPatientDashboard
+  onGoToAdmin
 }) => {
   const { hospitalConfig } = useAdminData();
-  const { patient, isAuthenticated } = usePatientAuth();
-  const { unreadCount } = useNotifications();
   const t = UI_TRANSLATIONS[lang].topBar;
   const isUrdu = lang === 'ur';
 
@@ -42,20 +36,31 @@ export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({
   return (
     <div className="bg-[#1F2933] text-slate-200 text-xs py-2 px-4 border-b border-slate-700/60 hidden md:block select-none">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-y-2">
-        {/* Left: Emergency Helpline & Location */}
-        <div className="flex items-center gap-4 flex-wrap">
+        {/* Left: Emergency Helpline, Simple Call & Location */}
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+          {/* 1. Emergency Button (Red) */}
           <a
             href={`tel:${emergencyPhoneRaw}`}
-            className="flex items-center gap-1.5 font-semibold text-rose-400 hover:text-rose-300 transition-colors bg-rose-950/60 px-2.5 py-0.5 rounded-full border border-rose-800/50"
-            title={isUrdu ? `24/7 ایمرجنسی ہاٹ لائن کال کریں: ${emergencyPhone}` : `Call 24/7 Helpline: ${emergencyPhone}`}
+            className="flex items-center gap-1.5 font-bold text-white transition-all bg-[#D62828] hover:bg-[#b51f1f] px-2.5 py-1 rounded-full shadow-xs active:scale-95 border border-red-400/30"
+            title={isUrdu ? `24/7 ایمرجنسی: ${emergencyPhone}` : `24/7 Emergency: ${emergencyPhone}`}
           >
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-80" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
             </span>
-            <AlertCircle className="w-3.5 h-3.5" />
-            <span>{t.emergency247}</span>
-            <span className="text-white font-mono font-bold tracking-wider">{emergencyPhone}</span>
+            <AlertCircle className="w-3.5 h-3.5 text-white" />
+            <span>{isUrdu ? 'ایمرجنسی 24/7' : 'Emergency 24/7'}</span>
+          </a>
+
+          {/* 2. Simple Call Button (Blue) */}
+          <a
+            href={`tel:${emergencyPhoneRaw}`}
+            className="flex items-center gap-1.5 font-bold text-white transition-all bg-[#1E5AA8] hover:bg-[#154685] px-2.5 py-1 rounded-full shadow-xs active:scale-95 border border-blue-400/30"
+            title={isUrdu ? `کال کریں: ${emergencyPhone}` : `Call: ${emergencyPhone}`}
+          >
+            <PhoneCall className="w-3.5 h-3.5 text-white" />
+            <span>{isUrdu ? 'کال:' : 'Call:'}</span>
+            <span className="font-mono tracking-wider">{emergencyPhone}</span>
           </a>
 
           <div className="flex items-center gap-1.5 text-slate-300">
@@ -68,29 +73,7 @@ export const HeaderTopBar: React.FC<HeaderTopBarProps> = ({
 
         {/* Right: Patient Account, Reports, Staff Portal & WhatsApp */}
         <div className="flex items-center gap-3.5 flex-wrap">
-          {/* Patient Portal / Login / My Account */}
-          {isAuthenticated && patient ? (
-            <button
-              onClick={onOpenPatientDashboard}
-              type="button"
-              className="flex items-center gap-1.5 text-emerald-300 hover:text-white font-semibold bg-emerald-950/70 hover:bg-emerald-900 px-2.5 py-0.5 rounded-full border border-emerald-700/50 cursor-pointer transition-colors"
-            >
-              <User className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="truncate max-w-[120px]">{patient.fullName || 'My Account'}</span>
-              {unreadCount > 0 && (
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              )}
-            </button>
-          ) : (
-            <button
-              onClick={onOpenPatientAuth}
-              type="button"
-              className="flex items-center gap-1 text-blue-300 hover:text-white font-semibold bg-blue-950/70 hover:bg-blue-900 px-2.5 py-0.5 rounded-full border border-blue-800/60 cursor-pointer transition-colors"
-            >
-              <User className="w-3.5 h-3.5 text-blue-400" />
-              <span>{isUrdu ? 'لاگ ان / سائن اپ' : 'Login / Sign Up'}</span>
-            </button>
-          )}
+
 
           {onOpenReportsModal && (
             <button

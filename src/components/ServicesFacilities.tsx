@@ -43,16 +43,30 @@ export const ServicesFacilities: React.FC<ServicesFacilitiesProps> = ({
 
   const categories = [
     { id: 'all', label: isUrdu ? 'تمام سہولیات' : 'All Facilities' },
-    { id: 'emergency', label: isUrdu ? 'ایمرجنسی و آئی سی یو' : 'Emergency & Critical Care' },
-    { id: 'diagnostics', label: isUrdu ? 'لیب و اسکیننگ' : 'Diagnostic Imaging & Lab' },
+    { id: 'diagnostics', label: isUrdu ? 'پیتھالوجی لیب و رپورٹس' : 'Diagnostic Lab & Reports' },
     { id: 'inpatient', label: isUrdu ? 'آپریشن تھیٹرز و فارمیسی' : 'Theatres & Pharmacy' }
   ];
 
   const filteredServices = allServices.filter((service) => {
+    // Explicitly exclude ICU and 128-slice CT Scan / 4D ultrasound
+    if (
+      service.id === 'icu' ||
+      service.id === 'imaging' ||
+      service.title?.toLowerCase().includes('intensive care') ||
+      service.title?.toLowerCase().includes('128-slice') ||
+      service.title?.toLowerCase().includes('ct scan') ||
+      service.title?.toLowerCase().includes('ultrasound')
+    ) {
+      return false;
+    }
+
     if (activeCategory === 'all') return true;
-    if (activeCategory === 'emergency') return service.id === 'icu';
-    if (activeCategory === 'diagnostics') return service.id === 'lab' || service.id === 'imaging' || service.id === 'homesampling' || service.id === 'online-reports';
-    if (activeCategory === 'inpatient') return service.id === 'theatres' || service.id === 'pharmacy';
+    if (activeCategory === 'diagnostics') {
+      return service.id === 'lab' || service.id === 'home-sampling' || service.id === 'homesampling' || service.id === 'online-reports';
+    }
+    if (activeCategory === 'inpatient') {
+      return service.id === 'theatres' || service.id === 'pharmacy';
+    }
     return true;
   });
 
@@ -101,8 +115,8 @@ export const ServicesFacilities: React.FC<ServicesFacilitiesProps> = ({
           ))}
         </div>
 
-        {/* Compact 4-Column Responsive Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        {/* Responsive Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
           {filteredServices.map((service) => {
             const IconComponent = SERVICE_ICONS[service.iconName] || Building;
 
@@ -146,7 +160,7 @@ export const ServicesFacilities: React.FC<ServicesFacilitiesProps> = ({
                   </div>
                 </div>
 
-                {service.id === 'lab' || service.id === 'homesampling' ? (
+                {service.id === 'lab' || service.id === 'home-sampling' || service.id === 'homesampling' ? (
                   <div className="p-4 pt-0">
                     <button
                       onClick={onBookHomeSampling}

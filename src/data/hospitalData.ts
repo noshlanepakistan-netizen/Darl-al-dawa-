@@ -627,28 +627,6 @@ export const SERVICES_FACILITIES: ServiceFacility[] = [
     image: "https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=800&q=80"
   },
   {
-    id: "imaging",
-    title: "128-Slice CT Scan & 4D Ultrasound",
-    titleUrdu: "128 سلائس سی ٹی اسکین اور الٹراساؤنڈ",
-    iconName: "Radio",
-    badge: "Low Radiation",
-    badgeUrdu: "محفوظ ترین ریڈی ایشن",
-    description: "Sub-millimeter resolution cross-sectional scanning, CT angiography, 4D anomaly pregnancy scans, and digital color doppler.",
-    descriptionUrdu: "ہائی ریزولیوشن سی ٹی اسکین اور جدید ترین ڈوپلر کلر الٹراساؤنڈ مشین۔",
-    image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "icu",
-    title: "Intensive Care Unit (ICU & NICU)",
-    titleUrdu: "انتہائی نگہداشت وارڈ (آئی سی یو و این آئی سی یو)",
-    iconName: "HeartHandshake",
-    badge: "1:1 Nursing",
-    badgeUrdu: "خصوصی 1:1 نرسنگ دیکھ بھال",
-    description: "Dedicated 18-bed closed ICU with invasive hemodynamic monitoring, high-flow nasal cannulas, and advanced isolation cubicles.",
-    descriptionUrdu: "وینٹی لیٹرز، کارڈیک مانیٹرز اور 24 گھنٹے موجود کنسلٹنٹ انٹینسوسٹ ڈاکٹرز۔",
-    image: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80"
-  },
-  {
     id: "theatres",
     title: "Modular Operation Theatres",
     titleUrdu: "ماڈیولر آپریشن تھیٹرز",
